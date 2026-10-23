@@ -18,6 +18,13 @@ typedef enum {
   TOK_FATARROW, /* => */
   TOK_STAR,
   TOK_BAR,
+  TOK_AT,       /* @ */
+  TOK_TILDE,    /* ~ */
+  TOK_MEET,     /* /\ */
+  TOK_JOIN,     /* \/ */
+  TOK_LBRACKET, /* [ */
+  TOK_RBRACKET, /* ] */
+  TOK_COMMA,
   TOK_KW_DEF,
   TOK_KW_REC,
   TOK_KW_FUN,
@@ -26,7 +33,8 @@ typedef enum {
   TOK_KW_TYPE,
   TOK_KW_SIGMA,
   TOK_KW_STATE,
-  TOK_KW_EVENT
+  TOK_KW_EVENT,
+  TOK_KW_AND
 } TokKind;
 
 typedef struct {

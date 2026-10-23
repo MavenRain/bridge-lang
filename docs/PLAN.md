@@ -321,6 +321,14 @@ intent-lang (S0 at 56821a7) plans the same R1 narrowing (its S3), `Enc`
 2162fb2. The slices that intent-lang also needs port the intent-lang
 commits when they exist, so the work is done once.
 
+S2 (2026-10-22) made the port by `git archive` of orbit-lang 2162fb2
+(`src`, `domain`, `examples`, `test`, `gen`, `Makefile`), plus the doc
+edits that docs/STATUS.md lists (section S2) and the O18 restore of
+`test/gate.sh`. kitshift was not used: it keeps each shared file at the
+seed text, and it drops `*.out` files (intent-lang S2 survey, section 5).
+intent-lang had no S2 commit at S1 (its HEAD 599f84d is its S1), so the
+port did not come from intent-lang.
+
 ## 7. The contract
 
 One contract, the same bytecode on each side. The side is a constructor
@@ -356,7 +364,7 @@ The ring size bounds the gas of `claim` (O17).
 |---|---|---|
 | S0 | Seed: the template with the tcc-evm-contract host, the design verbatim, this plan, the kit gate GREEN, the private remote | DONE |
 | S1 | USER rulings on the questions of section 11; record them in this plan | DONE |
-| S2 | Kernel port from orbit-lang 2162fb2 (section 6); the gate counts of orbit-lang | PLANNED |
+| S2 | Kernel port from orbit-lang 2162fb2 (section 6); the gate counts of orbit-lang | DONE (2026-10-22): examples 41, parse refusals 19, check refusals 171, kit-only refusals 22, evals 159, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S3 | R1 narrowing: `REFUSE_CELL`, the free monoid, the former matrix as CM and CC rows (port from intent-lang S3 when it exists) | PLANNED |
 | S4 | `Trace` as the free category CM in a slice; the category laws; the meaning functor; `Stream` of batches (CC) | PLANNED |
 | S5 | Part P: `Pos`, `Pool k`, `swapIn`, `swapOut`, the least-solution law, `addLiq`, `removeLiq`, the overflow bound | PLANNED |
@@ -403,7 +411,8 @@ The ring size bounds the gas of `claim` (O17).
   call.
 - O18: the dash check of `test/gate.sh` skips `design/DESIGN.md`, because
   the design is verbatim and holds two em-dashes (tile-lang ruling
-  2026-10-09). Builder call.
+  2026-10-09). Builder call. S2 kept the exemption after the port (the
+  orbit test/gate.sh has none).
 - O19: the kanon run dirs .kanon-exec/ and .kanon-wait/ are ignored, so
   `git add -A` cannot stage them. Builder call.
 
@@ -443,3 +452,19 @@ All ten are RULED (S1, 2026-10-22; the quote is in section 1).
 - Q10: fee and minimum output. (a) none, because the design gives none.
   RECOMMENDED. (b) a minimum output on `claim`; it needs a refund path.
   RULED: (a).
+
+### S2 questions (OPEN)
+
+- Q-S2-1. The bLSAG domain tag of the ported code is the ASCII word
+  "orbit" (`src/front/blsag.c` line 12). (a) keep it until S8, where the
+  claim rings make new ring vectors; S8 then gives the claim rings and the
+  ballot rings (S9) each its own tag, so that a key image of one use cannot
+  link to the other. Choose the words in the tag format of
+  `src/front/blsag.c` line 12. RECOMMENDED. (b) change it to "bridge" in
+  S3 and make the 14 precompile rows again. (c) keep "orbit" for good.
+- Q-S2-2. The order after S2, if intent-lang S3 (REFUSE_CELL) has no USER
+  commit yet. bridge-lang S3 ports it (Q9 (a)). (a) do S5 (Part P) next:
+  `Pool k` is indexed by a `U256` value, not by a type, so R1 does not
+  touch it; S3 and S4 come after the intent-lang S3 commit. RECOMMENDED.
+  (b) wait for intent-lang S3. (c) build S3 here (this goes against Q9
+  (a)).
