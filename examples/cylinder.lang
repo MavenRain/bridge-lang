@@ -1,0 +1,32 @@
+-- The mapping cylinder (PLAN 4.5, DESIGN ZKBridge). ZKBridge is the cylinder of result : PrivateInputs -> BridgeState,
+-- with the points public and privateComp and the path zkProof. A program cannot declare a family (REFUSE_DATA, O34), so
+-- Cyl A B f is a guest encoding (Q-S8-1 (a)): a point is its value in B and a truncated optional input in A. The
+-- truncation hides the input. A plain Sum does not work: no path goes from inl to inr.
+def Cyl : (A : Type 0) -> (B : Type 0) -> (A -> B) -> Type 0 := fun (A : Type 0) (B : Type 0) (f : A -> B) => (b : B) * Trunc1 (Option A)
+def cylPub : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> B -> Cyl A B f :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) (b : B) => pack b (trunc1 (Option A) none)
+def cylPriv : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> A -> Cyl A B f :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) (a : A) => pack (f a) (trunc1 (Option A) (some a))
+
+-- cylPush is zkProof: a path from the private point of a to the public point of f a, by squash1.
+def cylPush : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> (a : A) -> Path (Cyl A B f) (cylPriv A B f a) (cylPub A B f (f a)) :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) (a : A) => fun (i : I) => pack (f a) (squash1 (Option A) (trunc1 (Option A) (some a)) (trunc1 (Option A) none) i)
+
+-- A mapping cylinder is equivalent to its codomain: cylDown is the retraction, cylSec and cylRet are the paths.
+def cylDown : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> Cyl A B f -> B := fun (A : Type 0) (B : Type 0) (f : A -> B) (z : Cyl A B f) => witness z
+def cylSec : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> (b : B) -> Path B (cylDown A B f (cylPub A B f b)) b :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) (b : B) => refl
+def cylRet : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> (z : Cyl A B f) -> Path (Cyl A B f) (cylPub A B f (cylDown A B f z)) z :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) (z : Cyl A B f) => fun (i : I) => pack (witness z) (squash1 (Option A) (trunc1 (Option A) none) (payload z) i)
+-- A top-level Equiv value is refused (examples/equiv.lang), so the equivalence and its ua path are functions.
+def cylEquiv : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> Equiv (Cyl A B f) B :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) => isoToEquiv (Cyl A B f) B (cylDown A B f) (cylPub A B f) (cylSec A B f) (cylRet A B f)
+def cylPath : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> Path (Type 0) (Cyl A B f) B :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) => ua (Cyl A B f) B (cylEquiv A B f)
+
+-- An instance at Size with f the successor. The points are Size values: a guest program has no Nat literal.
+def succ : Size -> Size := fun (n : Size) => szS n
+def two : Size := szS (szS sz0)
+def downPub : Size := cylDown Size Size succ (cylPub Size Size succ two)
+def downPriv : Size := cylDown Size Size succ (cylPriv Size Size succ two)
+def equivFwd : Size := witness (cylEquiv Size Size succ) (cylPriv Size Size succ two)

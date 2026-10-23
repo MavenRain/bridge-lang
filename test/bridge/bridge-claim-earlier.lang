@@ -1,0 +1,2 @@
+-- A different depositor's claim preserves the first depositor's spent image.
+def pEarlier : RingState k0 := claimRing k0 ringTwice acc2 100u sig0 (pair refl refl) (pair refl (pair refl refl))

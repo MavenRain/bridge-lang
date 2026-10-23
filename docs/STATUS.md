@@ -344,3 +344,64 @@ Traps found in S7:
 The other counts do not change: parse refusals 19, pool refusals 4,
 bridge refusals 3, kit-only refusals 22, proves 2, contracts 2 written 5
 refused, rings 6 built 2 refused, differential 28 guest evals, runs 5.
+
+## S8
+
+Slice S8 (`ZKBridge` as the mapping cylinder and the bLSAG claim rings,
+the guest side, Q-S8-1 (a) to Q-S8-4 (a)) is complete. The change is not
+committed; its base is the USER commit 8e859a9 on 8077f7a (the S7 tree
+with the USER review fixes, O37). The gate `make clean` then `make
+check` is GREEN, exit 0.
+
+Changes:
+
+- `examples/cylinder.lang` (new, guest): `Cyl A B f := (b : B) * Trunc1
+  (Option A)`, `cylPub`, `cylPriv`, `cylPush` (`squash1`), `cylDown`,
+  `cylSec`, `cylRet`, `cylEquiv` (`isoToEquiv`) and `cylPath` (`ua`),
+  with a `Size` instance at f = succ (O38).
+- `examples/bridge.lang`: an S8 section with a copy of `Cyl` (Q-S6-1
+  (a)), `PrivateInputs`, `result`, `ZKBridge`, `public`,
+  `privateComp`, `zkProof`, `zkDownOf`, `zkEquiv` and `lawPublic`
+  (O38); the claim poll word, `ringAt`, `sigImage`, `fresh`,
+  `RingClaim`, `RingState` and `claimRing` beside `claim` (O39, O41,
+  O43); the laws
+  `lawRing`, `lawCross`, `lawImage`, `lawSecond` and `lawClaimRing`; 11
+  eval entries, plus 6 review regression entries for the claim state.
+- `test/check/zk-cyl-refl.lang` (`PATH_END`, guest).
+- `test/bridge`: `bridge-ring-cross.lang`, `bridge-claim-twice.lang`
+  and `bridge-claim-earlier.lang`
+  (`PATH_END`, all three in `test/bridge/kit.txt`).
+- `test/eval/expect.txt`: 20 rows (3 cylinder, 17 bridge).
+- No src change and no domain change.
+
+Traps found in S8:
+
+- The original `claimRing` checked a caller-supplied spent list but
+  returned only the pool. Reusing its signature with an empty list
+  paid twice. The transition now takes and returns the pool and spent
+  images together as `RingState`, adding its image and preserving the
+  prior images. Callers thread that state. Replay refusals exercise
+  the returned state immediately and after another depositor claims
+  (O43).
+- A top-level `Equiv` value is refused (`examples/equiv.lang`), so
+  `zkEquiv` is a function of `Unit` (O38).
+- `BLSAG_TAG` is a global constant and H_p hashes only the key, so one
+  key gives one key image at each tag and each poll. The poll word
+  separates claim signatures from ballot signatures, but no tag can
+  separate key images. The eval row `imgBallot` is 1. Key-image
+  unlinkability rests on one-time deposit keys, a VALIDATION assumption
+  (O39).
+- The wf-builder and its opus fallback both stopped on the
+  `reasoning_extraction` classifier; the main loop built S8 by hand
+  (O42).
+
+| Count | S7 | S8 | Reason |
+|---|---|---|---|
+| examples | 46 | 47 | `cylinder.lang` |
+| check refusals | 174 | 175 | `zk-cyl-refl.lang` |
+| bridge refusals | 3 | 6 | `bridge-ring-cross.lang`, `bridge-claim-twice.lang`, `bridge-claim-earlier.lang` |
+| evals | 217 | 237 | 3 cylinder rows, 17 bridge rows |
+
+The other counts do not change: parse refusals 19, pool refusals 4,
+kit-only refusals 22, proves 2, contracts 2 written 5 refused, rings 6
+built 2 refused, differential 28 guest evals, runs 5.

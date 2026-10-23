@@ -1,3 +1,6 @@
 bridge-claim-absent.lang PATH_END
 bridge-claim-high.lang PATH_END
 bridge-conserve.lang PATH_END
+bridge-ring-cross.lang PATH_END
+bridge-claim-twice.lang PATH_END
+bridge-claim-earlier.lang PATH_END

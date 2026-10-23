@@ -370,7 +370,7 @@ The ring size bounds the gas of `claim` (O17).
 | S5 | Part P: `Pos`, `Pool k`, `swapIn`, `swapOut`, the least-solution law, `addLiq`, `removeLiq`, the overflow bound | DONE (2026-10-22): examples 42, parse refusals 19, check refusals 171, pool refusals 4, kit-only refusals 22, evals 180, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S6 | Part B: credit, `InFlight`, `deposit`, `seal`, `accept`, `claim` on the guest side; conservation; `ua e` transport | DONE (2026-10-22): examples 43, parse refusals 19, check refusals 171, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 199, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | s1 DONE (2026-10-23), the guest side (Q-S7-1 (a)): examples 46, parse refusals 19, check refusals 174, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 217, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the host and precompile rows wait for intent-lang S5 and S6 (O33) |
-| S8 | `ZKBridge` as the mapping cylinder; `ZKBridge ≃ BridgeState`; bLSAG claim rings and key images | PLANNED |
+| S8 | `ZKBridge` as the mapping cylinder; `ZKBridge ≃ BridgeState`; bLSAG claim rings and key images | DONE (2026-10-23), the guest side (Q-S8-1 (a) to Q-S8-4 (a)): examples 47, parse refusals 19, check refusals 175, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 237, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; no src change and no domain change (O38 to O43) |
 | S9 | Part D: encrypted ballots, `tallyEnc`, the tally law, liquidity Decisions, the remote enactment | PLANNED |
 | S10 | The contract of section 7: writer, two-deployment differential, gas and size rows | PLANNED |
 | S11 | Mutants and close | PLANNED |
@@ -536,6 +536,66 @@ The ring size bounds the gas of `claim` (O17).
   and pass a false share. Two rows reject a concrete forgery and
   confirm that its claimed relation is false. The valid DLEQ z was
   recomputed for the corrected transcript.
+- O38: Q-S8-1 (a) is taken: `ZKBridge` is a guest mapping cylinder. A
+  program cannot declare a family (`REFUSE_DATA`, O34), so
+  `examples/cylinder.lang` has the alias `Cyl A B f := (b : B) * Trunc1
+  (Option A)`, and `examples/bridge.lang` has a copy (Q-S6-1 (a)). A
+  point is its public state and a truncated optional private input.
+  `zkProof` is `cylPush`: the path from `privateComp x` to `public
+  (result x)`, by `squash1`. `cylSec` is refl, `cylRet` is `squash1`,
+  and `isoToEquiv` gives the equivalence of `ZKBridge` and
+  `BridgeState` at open values; `ua` gives the path of types
+  (`cylPath`). A top-level `Equiv` value is refused
+  (`examples/equiv.lang`), so `zkEquiv` is a function of `Unit`.
+  `lawPublic` is refl at closed values (PLAN 5). A refl in the place of
+  `cylPush` is `PATH_END` (`test/check/zk-cyl-refl.lang`). No src
+  change and no domain change. Builder call.
+- O39: Q-S8-2 (a) is taken: the tag stays "orbit" (Q-S2-1 stays OPEN).
+  The poll word of a claim is the hash of the domain word "claim"
+  (0x636c61696d) and the batch number, so a claim signature is not a
+  ballot signature. The tag is the global constant `BLSAG_TAG`
+  (`src/front/blsag.c` line 12), and H_p hashes only (P.x, P.y)
+  (`src/front/blsag.c` line 87). So one key gives one key image at each
+  tag and each poll (`test/precompile.sh` lines 118 and 119 at poll 7
+  are equal to lines 105 and 106 at poll 0), and a tag cannot separate
+  key images. The eval row `imgBallot` (1) shows this link. VALIDATION
+  assumption: key-image unlinkability between the claim rings and the
+  ballot rings (S9) rests on one-time deposit keys (PLAN 4.5, O13).
+  Builder call.
+- O40: Q-S8-3 (a) is taken: `mpcCube` has no guest constructor.
+  `ZKBridge` is a set, and the content of the square is the S7 attest
+  law (O36). Builder call.
+- O41: Q-S8-4 (a) is taken: `claimRing` is beside `claim` in
+  `examples/bridge.lang`; `Mem` and `claim` do not change. `RingClaim a
+  d s spent` has two paths: `zkVerify` of s over the keys of the batch
+  of a with denomination d (`ringAt`) at the claim poll, and `fresh` of
+  the key image of s (`sigImage`, the last two words) in spent. A
+  claim transition takes and returns `RingState k`, pairing its pool
+  with the spent-image list, and prepends the newly spent image while
+  preserving the existing list. Callers thread the returned state. A
+  second claim with the same key gives the same key image, so it is not
+  fresh against that state (`test/bridge/bridge-claim-twice.lang`,
+  `PATH_END`), including after another depositor claims
+  (`test/bridge/bridge-claim-earlier.lang`). A
+  `flagYes` law at poll 0 is `PATH_END`
+  (`test/bridge/bridge-ring-cross.lang`). The pool words of `pRing` are
+  those of `pClaim`, (910, 1100) (`lawClaimRing`). Builder call.
+- O42: the builder calls of S8. The wf-builder (fable xhigh) and the
+  opus xhigh fallback both stopped on the `reasoning_extraction`
+  classifier, so the main loop built S8 by hand (USER ruling 10-05).
+  The comment at `examples/bridge.lang` lines 95 to 97 ("the kernel Bag
+  has a Size index") is stale (`domain/domain.lang` lines 64 to 70);
+  S8 did not change it. The optional `test/check/zk-guest-ring.lang`
+  (`REFUSE_KIT`) is not in S8: its first refusal is the U256 type, as
+  `kit-type-u256.lang` shows.
+- O43: staged review found that the original `claimRing` returned only
+  the pool and never recorded its key image. Reusing `sig0` with the
+  original empty spent list checked successfully and paid again,
+  changing (910, 1100) to (835, 1200). `RingState` now carries both
+  fields through the transition (O41). Six added eval rows check both
+  payouts, retention of the first image, and the two-image list after
+  a different depositor claims. The replay refusals use the actual
+  returned state rather than a manually assembled spent list.
 
 ## 11. Questions for the USER (S1)
 
@@ -690,3 +750,31 @@ carries the carrier question.
 
 Q-S7-1 (a) and Q-S7-2 (a) are taken. Q-S2-1, Q-S3-1, Q-S3-2, Q-S5-1,
 Q-S5-2, Q-S6-1, Q-S6-2 and Q-S6-3 stay OPEN.
+
+### S8 questions (OPEN)
+
+- Q-S8-1 (the form of `ZKBridge`). (a) a guest `Cyl` in `examples`, no
+  src change and no domain change. RECOMMENDED, taken (O38). (b)
+  `family Cyl` in `domain/domain.lang`. (c) a kernel splice
+  `kernel/zkbridge.lang`.
+- Q-S8-2 (the claim domain; Q-S2-1 stays OPEN). (a) keep the tag
+  "orbit", put the word "claim" in the poll slot, and record key-image
+  unlinkability as a VALIDATION assumption (one-time keys, O13), with
+  the fact that a tag cannot separate key images. RECOMMENDED, taken
+  (O39). (b) src: the tag as a parameter and H_p(tag, P); all the zk,
+  precompile, prove and contract vectors again. (c) Q-S2-1 (b) as
+  written: the global tag "bridge"; src, the vectors again, and no
+  key-image separation.
+- Q-S8-3 (`mpcCube`). (a) no guest constructor; `ZKBridge` is a set;
+  the content is the S7 attest law. RECOMMENDED, taken (O40). (b) a
+  refl square on `zkProof` at closed values. (c) defer to S10.
+- Q-S8-4 (the place of the ring claim). (a) extend
+  `examples/bridge.lang` beside `claim` and keep `Mem`. RECOMMENDED,
+  taken (O41). (b) replace `Mem` in `claim` (this changes
+  `examples/bridge.lang` line 141, `pClaim` and
+  `test/bridge/bridge-claim-absent.lang`). (c) a new kit example with a
+  copy of `examples/bridge.lang` (the Q-S6-1 pattern).
+
+Q-S8-1 (a), Q-S8-2 (a), Q-S8-3 (a) and Q-S8-4 (a) are taken. Q-S2-1,
+Q-S3-1, Q-S3-2, Q-S5-1, Q-S5-2, Q-S6-1, Q-S6-2, Q-S6-3 and Q-S7-2 stay
+OPEN.

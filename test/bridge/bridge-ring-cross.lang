@@ -1,0 +1,2 @@
+-- A claim signature is not a ballot signature: at poll 0 the ring does not verify it (S8, Q-S8-2 (a)).
+def lawCrossYes : Path Flag (zkVerify ring100 0u 100u sig0) flagYes := refl

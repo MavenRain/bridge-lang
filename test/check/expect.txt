@@ -172,3 +172,4 @@ perm-member0-wrong.lang PATH_END
 guest-list.lang REFUSE_CELL
 enc-guest-family.lang REFUSE_DATA
 attest-wrong.lang PATH_END
+zk-cyl-refl.lang PATH_END

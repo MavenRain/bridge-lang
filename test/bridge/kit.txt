@@ -1,3 +1,6 @@
 bridge-claim-absent.lang
 bridge-claim-high.lang
 bridge-conserve.lang
+bridge-ring-cross.lang
+bridge-claim-twice.lang
+bridge-claim-earlier.lang

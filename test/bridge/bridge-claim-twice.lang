@@ -1,0 +1,2 @@
+-- Replaying the signature against the first transition's returned state is not fresh (S8).
+def pTwice : RingState k0 := claimRing k0 ringOnce acc2 100u sig0 (pair refl refl) (pair refl (pair refl refl))

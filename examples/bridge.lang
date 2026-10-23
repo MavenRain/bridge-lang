@@ -81,7 +81,7 @@ def sideA : Side := 0
 def sideB : Side := 1
 def Credit : Type 0 := U256
 
--- Key is a one-time BN254 G1 key as its two affine coordinates (examples/bn254.lang). S8 adds the claim rings.
+-- Key is a one-time BN254 G1 key as its two affine coordinates (examples/bn254.lang). S8 puts the keys of a batch in a claim ring.
 def Key : Type 0 := Prod U256 U256
 
 -- Denom is the finite set of credit denominations (Q7, O22): 10 and 100.
@@ -120,7 +120,7 @@ def Sig : Type 0 := Prod U256 U256
 def Accepted : Type 0 := Prod Sealed Sig
 def accept : Sealed -> Sig -> Accepted := fun (s : Sealed) (g : Sig) => pair s g
 
--- Mem m a: the message m is in the accepted batch a. S8 replaces this proof with a bLSAG ring claim.
+-- Mem m a: the message m is in the accepted batch a. claimRing (S8) takes a bLSAG ring claim in place of this proof.
 def sameMsg : Msg -> Msg -> Flag := fun (m n : Msg) =>
   flagIf (u256Eq (first (witness m)) (first (witness n)))
     (flagIf (u256Eq (second (witness m)) (second (witness n))) (u256Eq (credit m) (credit n)) flagNo) flagNo
@@ -173,6 +173,91 @@ def uaAsset : Path (Type 0) U256 U256 := ua U256 U256 (idEquiv U256)
 def lawUaReserve : Path U256 (transport U256 U256 uaAsset (resX k0 (first dep))) 1112u := refl
 -- A transport of the whole Pool k0 value reaches the arena limit (OOM, Q-S6-3), so the law is on the reserve word.
 
+-- ZKBridge (PLAN 4.5, DESIGN ZKBridge) is the mapping cylinder of result : PrivateInputs -> BridgeState.
+-- A program cannot declare a family (REFUSE_DATA, O34), so Cyl is a guest encoding (Q-S8-1 (a)): a point is
+-- its public state and a truncated optional private input. The text is a copy of examples/cylinder.lang (Q-S6-1 (a)).
+def Cyl : (A : Type 0) -> (B : Type 0) -> (A -> B) -> Type 0 := fun (A : Type 0) (B : Type 0) (f : A -> B) => (b : B) * Trunc1 (Option A)
+def cylPub : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> B -> Cyl A B f :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) (b : B) => pack b (trunc1 (Option A) none)
+def cylPriv : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> A -> Cyl A B f :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) (a : A) => pack (f a) (trunc1 (Option A) (some a))
+def cylPush : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> (a : A) -> Path (Cyl A B f) (cylPriv A B f a) (cylPub A B f (f a)) :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) (a : A) => fun (i : I) => pack (f a) (squash1 (Option A) (trunc1 (Option A) (some a)) (trunc1 (Option A) none) i)
+def cylDown : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> Cyl A B f -> B := fun (A : Type 0) (B : Type 0) (f : A -> B) (z : Cyl A B f) => witness z
+def cylSec : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> (b : B) -> Path B (cylDown A B f (cylPub A B f b)) b :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) (b : B) => refl
+def cylRet : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> (z : Cyl A B f) -> Path (Cyl A B f) (cylPub A B f (cylDown A B f z)) z :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) (z : Cyl A B f) => fun (i : I) => pack (witness z) (squash1 (Option A) (trunc1 (Option A) none) (payload z) i)
+def cylEquiv : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> Equiv (Cyl A B f) B :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) => isoToEquiv (Cyl A B f) B (cylDown A B f) (cylPub A B f) (cylSec A B f) (cylRet A B f)
+
+-- PrivateInputs is the one-time secret key of a deposit. result is the claim of its batch: at the fixed
+-- values each key gives s2, the state after the claim of m100.
+def PrivateInputs : Type 0 := U256
+def result : PrivateInputs -> BridgeState k0 k0 := fun (x : PrivateInputs) => s2
+def ZKBridge : Type 0 := Cyl PrivateInputs (BridgeState k0 k0) result
+def public : BridgeState k0 k0 -> ZKBridge := fun (s : BridgeState k0 k0) => cylPub PrivateInputs (BridgeState k0 k0) result s
+def privateComp : PrivateInputs -> ZKBridge := fun (x : PrivateInputs) => cylPriv PrivateInputs (BridgeState k0 k0) result x
+def zkProof : (x : PrivateInputs) -> Path ZKBridge (privateComp x) (public (result x)) :=
+  fun (x : PrivateInputs) => cylPush PrivateInputs (BridgeState k0 k0) result x
+def zkDownOf : ZKBridge -> BridgeState k0 k0 := fun (z : ZKBridge) => cylDown PrivateInputs (BridgeState k0 k0) result z
+-- ZKBridge ≃ BridgeState (PLAN 4.5, 5). A top-level Equiv value is refused (examples/equiv.lang), so it is a function.
+def zkEquiv : Unit -> Equiv ZKBridge (BridgeState k0 k0) := fun (u : Unit) => cylEquiv PrivateInputs (BridgeState k0 k0) result
+-- mpcCube adds no constructor: ZKBridge is a set, and the content of the square is the S7 attest law (Q-S8-3 (a)).
+-- The public denotation does not depend on the private input (PLAN 5).
+def lawPublic : Path U256 (total k0 k0 (zkDownOf (privateComp 5u))) (total k0 k0 s2) := refl
+
+-- The claim ring (PLAN 4.5, 4.6) is the keys of one accepted batch with one denomination. The tag stays "orbit"
+-- (Q-S2-1). The poll word is the domain word "claim" and the batch number, and the signed word is the
+-- denomination (Q-S8-2 (a)). So a claim signature is not a ballot signature at the poll of a ballot.
+def gen : Key := pair 1u 2u
+def claimPollOf : Accepted -> U256 := fun (a : Accepted) => hash 0x636c61696du (first (second (first a)))
+def ringAt : U256 -> InFlight -> List Key := fun (d : U256) (b : InFlight) =>
+  fold (fun (m : Msg) (r : List Key) => flagIf (u256Eq (credit m) d) (cons (witness m) r) r) nil b
+-- The key image I is the last two words of a signature. The fold visits the tail first.
+def imgStep : U256 -> Prod U256 Key -> Prod U256 Key := fun (w : U256) (r : Prod U256 Key) =>
+  flagIf (u256Eq (first r) 0u) (pair 1u (pair 0u w))
+    (flagIf (u256Eq (first r) 1u) (pair 2u (pair w (second (second r)))) r)
+def sigImage : List U256 -> Key := fun (s : List U256) => second (fold imgStep (pair 0u (pair 0u 0u)) s)
+def sameKey : Key -> Key -> Flag := fun (a b : Key) => flagIf (u256Eq (first a) (first b)) (u256Eq (second a) (second b)) flagNo
+def spentHas : Key -> List Key -> Flag := fun (i : Key) (l : List Key) =>
+  fold (fun (j : Key) (r : Flag) => flagIf (sameKey i j) flagYes r) flagNo l
+def fresh : Key -> List Key -> Flag := fun (i : Key) (l : List Key) => flagIf (spentHas i l) flagNo flagYes
+-- RingClaim a d s spent: s is a ring signature over the keys of the batch of a with denomination d, and its key
+-- image is not in spent. A second claim with the same key gives the same key image, so it is not fresh.
+def RingClaim : Accepted -> U256 -> List U256 -> List Key -> Type 0 := fun (a : Accepted) (d : U256) (s : List U256) (spent : List Key) =>
+  Prod (Path Flag (zkVerify (ringAt d (sealedMsgs (first a))) (claimPollOf a) d s) flagYes) (Path Flag (fresh (sigImage s) spent) flagYes)
+-- A claim transition carries the pool and its spent images together. Callers thread the returned state.
+-- claimRing is claim with a ring claim in place of Mem (Q-S8-4 (a)). The chain does not learn which deposit claims.
+def RingState : U256 -> Type 0 := fun (k : U256) => Prod (Pool k) (List Key)
+def claimRing : (k : U256) -> (st : RingState k) -> (a : Accepted) -> (d : U256) -> (s : List U256) -> RingClaim a d s (second st) -> PoolLaw k (claimW (resX k (first st)) (resY k (first st)) d) -> RingState k :=
+  fun (k : U256) (st : RingState k) (a : Accepted) (d : U256) (s : List U256) (h : RingClaim a d s (second st)) (hp : PoolLaw k (claimW (resX k (first st)) (resY k (first st)) d)) =>
+    pair (poolFromWords k (claimW (resX k (first st)) (resY k (first st)) d) hp) (cons (sigImage s) (second st))
+
+-- The ring at fixed values: batch 2 has two deposits of 100 with curve keys and one deposit of 10.
+def q0 : Key := ecMul gen (zkKey 0)
+def q1 : Key := ecMul gen (zkKey 1)
+def c0 : Msg := mkMsg (first q0) (second q0) 100u refl
+def c1 : Msg := mkMsg (first q1) (second q1) 100u refl
+def batch2 : Sealed := seal sideA 2u (cons c0 (cons c1 (cons m10 nil)))
+def acc2 : Accepted := accept batch2 (pair 1u 2u)
+def claimPoll : U256 := claimPollOf acc2
+def ring100 : List Key := ringAt 100u (sealedMsgs batch2)
+def sig0 : List U256 := zkSign ring100 (zkKey 0) claimPoll 100u
+def img0 : Key := ecMul (zkHp q0) (zkKey 0)
+def lawRing : Path Flag (zkVerify ring100 claimPoll 100u sig0) flagYes := refl
+def lawCross : Path Flag (zkVerify ring100 0u 100u sig0) flagNo := refl
+def lawImage : Path Key (sigImage sig0) img0 := refl
+def lawSecond : Path Flag (fresh (sigImage sig0) (cons img0 nil)) flagNo := refl
+-- The ring claim of c0 pays the same 90 as claim: the pool goes to (910, 1100).
+def ringStart : RingState k0 := pair p0 nil
+def ringOnce : RingState k0 := claimRing k0 ringStart acc2 100u sig0 (pair refl refl) (pair refl (pair refl refl))
+def pRing : Pool k0 := first ringOnce
+def lawClaimRing : Path (Prod U256 U256) (poolWords k0 pRing) (poolWords k0 pClaim) := refl
+-- The other depositor can claim next. Its transition preserves the first depositor's spent image.
+def sig1 : List U256 := zkSign ring100 (zkKey 1) claimPoll 100u
+def ringTwice : RingState k0 := claimRing k0 ringOnce acc2 100u sig1 (pair refl refl) (pair refl (pair refl refl))
+
 -- Values and entries for the evals.
 def sDep : Prod U256 U256 := poolWords k0 (first dep)
 def sClaim : Prod U256 U256 := poolWords k0 pClaim
@@ -198,3 +283,23 @@ def duplicateRemaining : U256 := sumCredit (removeMsg m100 duplicateBatch)
 def absentRemaining : U256 := sumCredit (removeMsg m10 (cons m100 nil))
 def emptyRemaining : U256 := sumCredit (removeMsg m100 nil)
 def duplicateClaimTotal : U256 := total k0 k0 (pair p0 (pair pClaim (removeMsg m100 (cons m100 (cons m100 nil)))))
+
+-- The S8 entries. imgBallot is 1: H_p has no tag, so one key gives one key image at each poll (Q-S8-2).
+def ringOk : Flag := zkVerify ring100 claimPoll 100u sig0
+def ringBallot : Flag := zkVerify ring100 0u 100u sig0
+def ringSize : U256 := fold (fun (q : Key) (n : U256) => u256Add 1u n) 0u ring100
+def imgIn : Flag := sameKey (sigImage sig0) img0
+def imgBallot : Flag := sameKey (sigImage (zkSign ring100 (zkKey 0) 0u 100u)) img0
+def imgOther : Flag := sameKey (sigImage (zkSign ring100 (zkKey 1) claimPoll 100u)) img0
+def firstClaim : Flag := fresh (sigImage sig0) (second ringStart)
+def secondClaim : Flag := fresh (sigImage sig0) (second ringOnce)
+def earlierClaim : Flag := fresh (sigImage sig0) (second ringTwice)
+def ringClaimX : U256 := resX k0 (first ringOnce)
+def ringClaimY : U256 := resY k0 (first ringOnce)
+def secondSignerX : U256 := resX k0 (first ringTwice)
+def secondSignerY : U256 := resY k0 (first ringTwice)
+def spentImages : U256 := fold (fun (q : Key) (n : U256) => u256Add 1u n) 0u (second ringTwice)
+-- outsider c: the key zkKey c signs the ring. A key outside the ring traps.
+def outsider : Nat -> Flag := fun (c : Nat) => zkVerify ring100 claimPoll 100u (zkSign ring100 (zkKey c) claimPoll 100u)
+def zkDown : U256 := total k0 k0 (zkDownOf (privateComp 5u))
+def zkBack : U256 := total k0 k0 (zkDownOf (public s1))

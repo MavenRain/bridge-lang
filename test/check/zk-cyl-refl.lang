@@ -1,0 +1,6 @@
+-- The cylinder path zkProof is not refl (S8): the private point and the public point differ in the truncated input.
+def Cyl : (A : Type 0) -> (B : Type 0) -> (A -> B) -> Type 0 := fun (A : Type 0) (B : Type 0) (f : A -> B) => (b : B) * Trunc1 (Option A)
+def cylPub : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> B -> Cyl A B f := fun (A : Type 0) (B : Type 0) (f : A -> B) (b : B) => pack b (trunc1 (Option A) none)
+def cylPriv : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> A -> Cyl A B f := fun (A : Type 0) (B : Type 0) (f : A -> B) (a : A) => pack (f a) (trunc1 (Option A) (some a))
+def cylPush : (A : Type 0) -> (B : Type 0) -> (f : A -> B) -> (a : A) -> Path (Cyl A B f) (cylPriv A B f a) (cylPub A B f (f a)) :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) (a : A) => refl
