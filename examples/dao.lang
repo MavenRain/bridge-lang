@@ -98,9 +98,9 @@ def amendedIs : Path Outcome amended tallied := refl
 def orbitRel : Config -> Config -> Type 0 := fun (c : Config) (d : Config) => Sigma (g : Group) (Path Config (act g d) c)
 
 -- Law 1, anonymity: aggregate F takes the same value on a configuration and on each act of it, by cong of aggregate F
--- on the quotEq path. The strong form is the invariance proof of F, as the fold rule gives the ends.
+-- on the orbitEq path. The strong form is the invariance proof of F, as the fold rule gives the ends.
 def anon : (F : Constitution) -> (g : Group) -> (c : Config) -> Path Outcome (aggregate F (orbitProj (act g c))) (aggregate F (orbitProj c)) :=
-  fun (F : Constitution) (g : Group) (c : Config) => fun (i : I) => aggregate F (quotEq Config orbitRel (act g c) c (pack g refl) i)
+  fun (F : Constitution) (g : Group) (c : Config) => fun (i : I) => aggregate F (orbitEq (act g c) c (pack g refl) i)
 def anonStrong : (F : Constitution) -> (g : Group) -> (c : Config) -> Path Outcome (aggregate F (orbitProj (act g c))) (aggregate F (orbitProj c)) :=
   fun (F : Constitution) (g : Group) (c : Config) => payload F g c
 
@@ -129,8 +129,8 @@ def propSquare : (X : Type 0) -> (P : X -> Type 0) -> ((x : X) -> isProp (P x)) 
 
 -- Law 2, uniqueness: an aggregation L that agrees with the rule of F after orbitProj is aggregate F. orbitExt is elim
 -- on Orbit (O21) into the family of propositions Path Outcome (L z) (M z), for two aggregations that agree after
--- orbitProj: h at the quot case, propOver at the quotEq case and propSquare at the quotSquash case. The set proof sO
--- and M are variables, so the motive does not unfold aggregate at the quotSquash case. desc is the path lambda over
+-- orbitProj: h at the orbitProj case, propOver at the orbitEq case and propSquare at the orbitSquash case. The set proof sO
+-- and M are variables, so the motive does not unfold aggregate at the orbitSquash case. desc is the path lambda over
 -- orbitExt at M = aggregate F, where h converts by the fold rule and eta.
 def orbitExt : isSet Outcome -> (L : Aggregation) -> (M : Aggregation) -> Path (Config -> Outcome) (fun (c : Config) => L (orbitProj c)) (fun (c : Config) => M (orbitProj c)) -> (x : Orbit) -> Path Outcome (L x) (M x) :=
   fun (sO : isSet Outcome) (L : Aggregation) (M : Aggregation) (h : Path (Config -> Outcome) (fun (c : Config) => L (orbitProj c)) (fun (c : Config) => M (orbitProj c))) (x : Orbit) =>
@@ -138,12 +138,12 @@ def orbitExt : isSet Outcome -> (L : Aggregation) -> (M : Aggregation) -> Path (
       (fun (a : Config) => fun (k : I) => (h @ k) a)
       (fun (a : Config) (b : Config) (r : orbitRel a b) => fun (i : I) =>
         propOver Orbit (fun (z : Orbit) => Path Outcome (L z) (M z)) (fun (z : Orbit) => sO (L z) (M z))
-          (orbitProj a) (orbitProj b) (fun (k : I) => quotEq Config orbitRel a b r k) (fun (k : I) => (h @ k) a) (fun (k : I) => (h @ k) b) @ i)
+          (orbitProj a) (orbitProj b) (fun (k : I) => orbitEq a b r k) (fun (k : I) => (h @ k) a) (fun (k : I) => (h @ k) b) @ i)
       (fun (w : Orbit) (ihw : Path Outcome (L w) (M w)) (y : Orbit) (ihy : Path Outcome (L y) (M y))
         (p : Path Orbit w y) (ihp : PathP (fun (j : I) => Path Outcome (L (p @ j)) (M (p @ j))) ihw ihy)
         (q : Path Orbit w y) (ihq : PathP (fun (j : I) => Path Outcome (L (q @ j)) (M (q @ j))) ihw ihy) =>
         fun (i : I) => fun (j : I) => (propSquare Orbit (fun (z : Orbit) => Path Outcome (L z) (M z)) (fun (z : Orbit) => sO (L z) (M z))
-          w y p q (fun (m : I) => fun (n : I) => quotSquash Config orbitRel w y p q m n) ihw ihy ihp ihq @ i) @ j) x
+          w y p q (fun (m : I) => fun (n : I) => orbitSquash w y p q m n) ihw ihy ihp ihq @ i) @ j) x
 def desc : (F : Constitution) -> (L : Aggregation) -> Path (Config -> Outcome) (fun (c : Config) => L (orbitProj c)) (witness F) -> Path Aggregation L (aggregate F) :=
   fun (F : Constitution) (L : Aggregation) (h : Path (Config -> Outcome) (fun (c : Config) => L (orbitProj c)) (witness F)) =>
     fun (i : I) => fun (x : Orbit) => orbitExt outcomeSet L (aggregate F) h x @ i
@@ -170,15 +170,15 @@ def isSetAgg : isSet Aggregation :=
 
 -- The Charter history fold: genesis is the aggregation of agreeCon, and an adoption amends the folded base. The
 -- adoptTwice case is sym (amendTwice b), law 4 in the type. Ratified folds into Unit.
-def history : Charter Outcome -> Aggregation :=
-  fun (c : Charter Outcome) => fold Aggregation Unit
+def history : Charter -> Aggregation :=
+  fun (c : Charter) => fold Aggregation Unit
     (aggregate agreeCon)
     (fun (b : Aggregation) (r : Unit) => amend b)
-    (fun (b : Aggregation) (w : Outcome) => fun (i : I) => sym (amendTwice b) @ i)
+    (fun (b : Aggregation) (w : Size) => fun (i : I) => sym (amendTwice b) @ i)
     (fun (x : Aggregation) (y : Aggregation) (p : Path Aggregation x y) (q : Path Aggregation x y) => fun (i : I) => fun (j : I) => (isSetAgg x y p q @ i) @ j)
-    (fun (b : Aggregation) (w : Outcome) => unit)
+    (fun (b : Aggregation) (w : Size) => unit)
     (fun (a : Aggregation) (x : Unit) (y : Unit) (p : Path Unit x y) (q : Path Unit x y) => fun (i : I) => fun (j : I) => (isSetUnit x y p q @ i) @ j) c
-def charterOne : Charter Outcome := adopt Outcome (genesis Outcome) (ratify Outcome (genesis Outcome) (inl unit))
+def charterOne : Charter := adopt genesis (ratify genesis sz0)
 def historyOne : Outcome := history charterOne splitTally
 def historyOneIs : Path Outcome historyOne tallied := refl
 def b0 : Ballot_priv := castPrivate (inl unit) (inr unit)

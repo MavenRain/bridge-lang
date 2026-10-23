@@ -9,20 +9,24 @@ static int load_one(Arena *arena, const char *source, Origin origin, const char 
   return parse_source(arena, source, origin, &toks, out, diag);
 }
 
-/* Orbit as a kernel declaration (orbit-lang S4, PLAN section 8): the set
-   quotient of the voter assignments by act. R is inline, so the kernel adds
-   no other name. */
+/* Orbit as a kernel family (orbit-lang S4, PLAN section 8; bridge-lang S3,
+   design C 2a): the set quotient of the voter assignments by act, with no
+   parameter. orbitEq is a path from orbitProj a to orbitProj b for each g
+   with act g b = a, and orbitSquash has the squash0 shape, so the
+   orbitSquash fold case has the type isSet RES. */
 #define ORBIT_SOURCE_NAME "kernel/orbit.lang"
-#define ORBIT_R "(fun (c : Member -> Choice) (d : Member -> Choice) => Sigma (g : Group) (Path (Member -> Choice) (act g d) c))"
 
 static const char orbit_source[] =
-  "def Orbit : Type 0 := Quot (Member -> Choice) " ORBIT_R "\n"
-  "def orbitProj : (Member -> Choice) -> Orbit := fun (c : Member -> Choice) => quot (Member -> Choice) " ORBIT_R " c\n";
+  "family Orbit := orbitProj (orbitOf : Member -> Choice)\n"
+  "  | orbitEq (orbitA : Member -> Choice) (orbitB : Member -> Choice) (orbitR : Sigma (g : Group) (Path (Member -> Choice) (act g orbitB) orbitA)) (i : I)\n"
+  "    [ ~i -> orbitProj orbitA, i -> orbitProj orbitB ]\n"
+  "  | orbitSquash (orbitFrom : Orbit) (orbitTo : Orbit) (orbitLeft : Path Orbit orbitFrom orbitTo) (orbitRight : Path Orbit orbitFrom orbitTo) (i : I) (j : I)\n"
+  "    [ ~i -> orbitLeft @ j, i -> orbitRight @ j, ~j -> orbitFrom, j -> orbitTo ]\n";
 
 /* The DAO prelude as kernel declarations (orbit-lang S7, PLAN section 8):
    the defined names of the design signature after Orbit. aggregate is the
-   Quot fold of the rule of a constitution, with the outcomeSet slot as its
-   quotSquash case, so the prelude needs the slot. R is inline, as above. */
+   Orbit fold of the rule of a constitution, with the outcomeSet slot as its
+   orbitSquash case, so the prelude needs the slot. */
 #define DAO_SOURCE_NAME "kernel/dao.lang"
 
 static const char dao_source[] =
@@ -35,7 +39,7 @@ static const char dao_source[] =
   "    trans Outcome (witness F a) (witness F (act (witness r) b)) (witness F b) (sym (cong (witness F) (payload r))) (payload F (witness r) b))\n"
   "  outcomeSet z\n"
   "def gov : Aggregation -> Constitution := fun (L : Aggregation) => pack (fun (c : Config) => L (orbitProj c))\n"
-  "  (fun (g : Group) (c : Config) => fun (i : I) => L (quotEq (Member -> Choice) " ORBIT_R " (act g c) c (pack g refl) i))\n"
+  "  (fun (g : Group) (c : Config) => fun (i : I) => L (orbitEq (act g c) c (pack g refl) i))\n"
   "def amend : Aggregation -> Aggregation := fun (L : Aggregation) => aggregate (gov L)\n";
 
 /* The ZK surface as kernel declarations (orbit-lang S8 B2b, PLAN
@@ -54,10 +58,11 @@ static const char zk_source[] =
   "def project : Ballot_priv -> Choice := fun (b : Ballot_priv) => zkProject Choice b\n"
   "def verifyZK : ZKWitness -> Choice -> Tally -> Type 0 := fun (w : ZKWitness) (c : Choice) (t : Tally) => zkCheck Member Choice w c\n";
 
-/* The first definition named NAME in OUT from FIRST on, or OUT->count. */
+/* The first definition or family named NAME in OUT from FIRST on, or
+   OUT->count. */
 static size_t def_at(const DeclList *out, size_t first, const char *name) {
   size_t at;
-  for (at = first; at < out->count && (out->items[at].kind != DECL_DEF || strcmp(out->items[at].name, name) != 0); at++)
+  for (at = first; at < out->count && ((out->items[at].kind != DECL_DEF && out->items[at].kind != DECL_FAMILY) || strcmp(out->items[at].name, name) != 0); at++)
     ;
   return at;
 }
@@ -92,11 +97,11 @@ static int splice_after(Arena *arena, size_t first, const char *const *after, si
 }
 
 static const char *const ORBIT_AFTER[] = {"act"};
-static const char *const DAO_AFTER[] = {"orbitProj", "outcomeSet"};
+static const char *const DAO_AFTER[] = {"Orbit", "outcomeSet"};
 static const char *const ZK_AFTER[] = {"Member", "Choice", "Tally"};
 
-/* Orbit and orbitProj go directly after act. The DAO prelude goes after the
-   last of orbitProj (so after act) and outcomeSet. The ZK surface goes
+/* The family Orbit goes directly after act. The DAO prelude goes after the
+   last of Orbit (so after act) and outcomeSet. The ZK surface goes
    after the last of Member, Choice and Tally (so after the DAO prelude). */
 static int orbit_after_act(Arena *arena, size_t first, DeclList *out, Diag *diag) {
   return splice_after(arena, first, ORBIT_AFTER, 1u, ORBIT_SOURCE_NAME, orbit_source, sizeof orbit_source - 1u, out, diag)

@@ -234,3 +234,66 @@ refused, rings 6 built 2 refused, differential 28 guest evals, 14 host
 runs and 14 EVM rows, runs 5, run refusals 10, lower refusals 16, build
 checks 33, precompile steps 128, evm steps 43, mock 13 rows, diff 15
 rows, emit 24 executions, and the regressions.
+
+## S3
+
+Slice S3 (R1 narrowing: `REFUSE_CELL`, the free monoid, the former
+matrix as CM and CC rows) is complete as a port of intent-lang 32c1d13
+(its parent aacc8ad). The change is not committed; its base is ce6f9d3.
+The patch is `git diff aacc8ad 32c1d13` of intent-lang without
+docs/PLAN.md and docs/STATUS.md, with `intent-lang` renamed
+`bridge-lang`. It applied clean: 34 paths, no reject. The gate `make
+clean` then `make check` is GREEN, exit 0.
+
+Changes:
+
+- `src/front/check.c`: a declared type constructor must have the
+  cell-signature shape (`REFUSE_CELL`); universe aliases are normalized;
+  higher-kinded parameters and type indices are refused; closed operation
+  labels are kept; a guest use of the kit cons list `List` is refused
+  (`test/check/guest-list.lang`). `src/front/front.c`: one hunk.
+- `domain/domain.lang`: `FreeMon` with `fmFold`, bind and map; `Quot` and
+  the indexed cons `Bag` are replaced by `Orbit`, `Parity`, `ChoiceBag`,
+  `OrbitN` and the free commutative monoid `Bag` (`bagOf`, `bagUnit`,
+  `bagOp`, `bagAssoc`, `bagComm`, `bagUnitL`, `bagSquash`; no `Size`
+  index); the Charter rule type is `Size`.
+- `examples/freemon.lang` (new). 12 examples, SPEC.md,
+  formers/FORMERS.md, formers/tcc-evm-contract.md, docs/host/README.md,
+  9 test/check files, `test/check/guest-list.lang` (new),
+  `test/check/expect.txt` and `test/lower/orbit-word.lang` follow the new
+  families.
+- `test/fronttool.c`: 10 C regression cases (5 `REFUSE_CELL` and the
+  review cases).
+- `test/eval/expect.txt`: 9 rows rewritten in place (formers `xs`, quot
+  `toTrunc3`, 7 elim rows). The 21 pool and 19 bridge rows stay.
+- No change in the bridge-lang-only files (`examples/pool.lang`,
+  `examples/bridge.lang`, `test/pool/*`, `test/bridge/*`): they use
+  `List`, `nil`, `cons`, `unfold` and `fold` under `--kit`, and the
+  `List` refusal is guest mode only (O28).
+- Local lines kept against the patch: O26 and O27.
+
+Traps found in S3:
+
+- A fold out of the free commutative monoid `Bag Msg` into `U256` needs
+  four paths at open words: `u256Add` assoc, comm and left unit (each
+  `PATH_END`) and `isSet U256` (`PATH_UIP`). The S6 trap named only the
+  comm path. So `InFlight` stays `List Msg` (Q-S3-1, O29).
+- The intent-lang aacc8ad fronttool case `constant` (`transp` along a
+  constant `ZkBallot C` line is the identity by refl) is `PATH_END` on
+  the bridge-lang checker: `src/front/eval.c` line 2525 has no
+  constant-line rule at `ZkBallot` (Q-S3-2, O31).
+- The `Q-S3-n` citations in the ported files name intent-lang rulings
+  (O30).
+
+| Count | S6 | S3 | Reason |
+|---|---|---|---|
+| examples | 43 | 44 | `freemon.lang` |
+| check refusals | 171 | 172 | `test/check/guest-list.lang` (`REFUSE_CELL`) |
+
+The other counts do not change: parse refusals 19, pool refusals 4,
+bridge refusals 3, kit-only refusals 22, evals 199, proves 2, contracts 2
+written 5 refused, rings 6 built 2 refused, differential 28 guest evals,
+14 host runs and 14 EVM rows, runs 5, run refusals 10, lower refusals 16,
+build checks 33, precompile steps 128, evm steps 43, mock 13 rows, diff
+15 rows, emit 24 executions, and the regressions (fronttool has 10 more
+cases).

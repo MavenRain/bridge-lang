@@ -61,7 +61,10 @@ typedef struct {
    scope and the kit mode resolve it. */
 typedef enum {
   VIS_GUEST,
-  VIS_INTERNAL
+  VIS_INTERNAL,
+  /* A cons-list name (S3, USER ruling Q-S3-5 (a), rule R1): the kit and
+     the trusted scope use it (the host ABI); a guest use gives REFUSE_CELL. */
+  VIS_CELL
 } Vis;
 
 typedef enum {
@@ -135,7 +138,7 @@ static const Builtin BUILTINS[] = {
   {"Prod", 2, RULE_TYPE2, OP_PROD, OP_NAT, 0, VIS_GUEST},
   {"Sum", 2, RULE_TYPE2, OP_SUM, OP_NAT, 0, VIS_GUEST},
   {"Option", 1, RULE_TYPE1, OP_OPTION, OP_NAT, 0, VIS_GUEST},
-  {"List", 1, RULE_TYPE1, OP_LIST, OP_NAT, 0, VIS_GUEST},
+  {"List", 1, RULE_TYPE1, OP_LIST, OP_NAT, 0, VIS_CELL},
   {"Fin", 1, RULE_FIN, OP_FIN, OP_NAT, 0, VIS_INTERNAL},
   {"finAdd", 3, RULE_FIN_OP, OP_FIN_ADD, OP_FIN, 0, VIS_INTERNAL},
   {"finNeg", 2, RULE_FIN_OP, OP_FIN_NEG, OP_FIN, 0, VIS_INTERNAL},
@@ -151,9 +154,9 @@ static const Builtin BUILTINS[] = {
   {"inl", 1, RULE_INJ, OP_INL, OP_SUM, 0, VIS_GUEST},
   {"inr", 1, RULE_INJ, OP_INR, OP_SUM, 1, VIS_GUEST},
   {"none", 0, RULE_EMPTY, OP_NONE, OP_OPTION, 0, VIS_GUEST},
-  {"nil", 0, RULE_EMPTY, OP_NIL, OP_LIST, 0, VIS_GUEST},
+  {"nil", 0, RULE_EMPTY, OP_NIL, OP_LIST, 0, VIS_CELL},
   {"some", 1, RULE_SOME, OP_SOME, OP_OPTION, 0, VIS_GUEST},
-  {"cons", 2, RULE_CONS, OP_CONS, OP_LIST, 0, VIS_GUEST},
+  {"cons", 2, RULE_CONS, OP_CONS, OP_LIST, 0, VIS_CELL},
   {"pack", 2, RULE_PACK, OP_PACK, OP_NAT, 0, VIS_GUEST},
   {"refl", 0, RULE_REFL, OP_INTERVAL, OP_NAT, 0, VIS_GUEST},
   {"first", 1, RULE_PART, OP_FIRST, OP_PROD, 0, VIS_GUEST},
@@ -168,7 +171,7 @@ static const Builtin BUILTINS[] = {
   {"bind", 2, RULE_BIND, OP_BIND, OP_NAT, 0, VIS_GUEST},
   {"filter", 2, RULE_FILTER, OP_FILTER, OP_NAT, 0, VIS_GUEST},
   {"fold", 2, RULE_FOLD, OP_FOLD_NAT, OP_NAT, 0, VIS_GUEST},
-  {"unfold", 3, RULE_UNFOLD, OP_UNFOLD, OP_LIST, 0, VIS_GUEST},
+  {"unfold", 3, RULE_UNFOLD, OP_UNFOLD, OP_LIST, 0, VIS_CELL},
   {"sym", 1, RULE_SYM, OP_INTERVAL, OP_NAT, 0, VIS_GUEST},
   {"cong", 2, RULE_CONG, OP_INTERVAL, OP_NAT, 0, VIS_GUEST},
   {"funExt", 1, RULE_FUNEXT, OP_INTERVAL, OP_NAT, 0, VIS_GUEST},
@@ -2626,6 +2629,8 @@ static int resolve_head(Checker *c, const Term *head, Head *h) {
     return 1;
   if (!find_known(c, head->name, h))
     return unknown_name(c, head->name);
+  if (guest(c) && h->kind == HEAD_BUILTIN && h->builtin->vis == VIS_CELL)
+    return FAIL(c, "REFUSE_CELL", "%s is a cons-list name, not a cell monad; a guest program uses FreeMon of domain/domain.lang (rule R1)", head->name);
   return guest(c) && kit_head(c, h) ? kit_refused(c, head->name) : 1;
 }
 
@@ -3076,9 +3081,140 @@ static int own_family(const Machine *m, uint32_t fam, const Core *t, uint32_t sh
   return 1;
 }
 
+/* A family with a type parameter is a type constructor, so it must be a
+   cell signature (S3, rule R1): only type parameters, no and block, each
+   type parameter the one field of exactly one generator constructor, and
+   every other point field closed data, the family at its own parameters
+   or a path in it. REFUSE_CELL comes before DOMAIN_FAMILY. */
+typedef struct CellSeen CellSeen;
+struct CellSeen {
+  uint32_t family;
+  const CellSeen *next;
+};
+
+/* A type can be packed into a data argument, including a closed family.
+   Function domains do not count: a polymorphic value returning data is
+   still a value argument. Follow only the codomain of a function type. */
+static int cell_type_argument_in(const Machine *m, const Core *t, const CellSeen *seen) {
+  uint32_t i, j;
+  if (t == NULL)
+    return 0;
+  if (t->kind == CORE_UNIV)
+    return 1;
+  if (t->kind == CORE_PI)
+    return cell_type_argument_in(m, t->b, seen);
+  if (t->kind == CORE_GLOBAL)
+    return cell_type_argument_in(m, m->defs[t->index].body, seen);
+  if (t->kind == CORE_OP && t->op == OP_FAMILY && m->families[t->inst].universe > 0u) {
+    const FamilyInfo *f = &m->families[t->inst];
+    const CellSeen *s;
+    CellSeen entry = {t->inst, seen};
+    for (s = seen; s != NULL && s->family != t->inst; s = s->next)
+      ;
+    if (s == NULL)
+      for (i = 0; i < f->ctor_count; i++) {
+        const CtorInfo *ci = &m->ctors[f->first_ctor + i];
+        for (j = 0; j < ci->field_count; j++)
+          if (cell_type_argument_in(m, ci->fields[j].type, &entry))
+            return 1;
+      }
+  }
+  if (cell_type_argument_in(m, t->a, seen) || cell_type_argument_in(m, t->b, seen))
+    return 1;
+  for (i = 0; i < t->argc; i++)
+    if (cell_type_argument_in(m, t->args[i], seen))
+      return 1;
+  return 0;
+}
+
+static int cell_type_argument(const Machine *m, const Core *t) {
+  return cell_type_argument_in(m, t, NULL);
+}
+
+static int has_type_param(const Machine *m, const FamilyInfo *f) {
+  uint32_t k;
+  for (k = 0; k < f->param_count; k++)
+    if (cell_type_argument(m, f->param_types[k]))
+      return 1;
+  return 0;
+}
+
+/* The type parameter that T is, in the context of the parameters and
+   EARLIER fields, or the parameter count when T is not one. */
+static uint32_t cell_param(const FamilyInfo *f, const Core *t, uint32_t earlier) {
+  uint32_t p = f->param_count;
+  uint32_t k = t->kind == CORE_VAR && t->index >= earlier && t->index - earlier < p ? p - 1u - (t->index - earlier) : p;
+  return k < p && f->param_types[k]->kind == CORE_UNIV ? k : p;
+}
+
+static int cell_header(Checker *c, const Decl *d, uint32_t first, uint32_t count) {
+  uint32_t s, k;
+  for (s = 0; s < count; s++) {
+    const FamilyInfo *f = &c->m->families[first + s];
+    for (k = 0; k < f->index_count; k++)
+      if (cell_type_argument(c->m, f->index_types[k]))
+        return FAIL(c, "REFUSE_CELL", "%s has a type index; a cell signature binds its type arguments as uniform parameters (rule R1)", f->name);
+    for (k = 0; has_type_param(c->m, f) && k < f->param_count; k++) {
+      if (count > 1u && f->param_types[k]->kind == CORE_UNIV)
+        return FAIL(c, "REFUSE_CELL", "%s has the type parameter %s in an and block; a type constructor is one cell signature (rule R1)", f->name, d[s].params[k].name);
+      if (f->param_types[k]->kind != CORE_UNIV)
+        return FAIL(c, "REFUSE_CELL", "%s has a type argument and the parameter %s is not a universe; a cell signature has only type parameters (rule R1)", f->name, d[s].params[k].name);
+    }
+  }
+  return 1;
+}
+
+/* Closed operation labels cannot depend on a type parameter or an earlier
+   field. Binders inside the label type still bind their own variables. */
+static int cell_closed(const Core *t, uint32_t depth) {
+  uint32_t i;
+  int binder;
+  if (t == NULL)
+    return 1;
+  if (t->kind == CORE_VAR)
+    return t->index < depth;
+  binder = t->kind == CORE_PI || t->kind == CORE_SIGMA || t->kind == CORE_LAM || t->kind == CORE_PLAM || t->kind == CORE_PATHP;
+  if (!cell_closed(t->a, depth) || !cell_closed(t->b, depth + (uint32_t)binder))
+    return 0;
+  for (i = 0; i < t->argc; i++)
+    if (!cell_closed(t->args[i], depth))
+      return 0;
+  return 1;
+}
+
+static int cell_field(Checker *c, uint32_t fam, const FieldInfo *out, uint32_t earlier, size_t field_count) {
+  const FamilyInfo *f = &c->m->families[fam];
+  const Core *t = out->type;
+  if (cell_param(f, t, earlier) < f->param_count)
+    return field_count == 1u ? 1 : FAIL(c, "REFUSE_CELL", "%s is not a cell signature: the field %s has a type parameter as its type, so it must be the one field of its constructor (rule R1)", f->name, out->name);
+  if (own_family(c->m, fam, t, earlier) || (t->kind == CORE_PATHP && own_family(c->m, fam, t->b, earlier + 1u)))
+    return 1;
+  if (c->self_uses == 0u && cell_closed(t, 0u))
+    return 1;
+  return FAIL(c, "REFUSE_CELL", "%s is not a cell signature: the field %s must be a type parameter, closed data, %s at its own parameters or a path in %s (rule R1)", f->name, out->name, f->name, f->name);
+}
+
+/* Each type parameter has exactly one generator (S3, open point QA1:
+   two generators for one parameter are refused). */
+static int cell_generators(Checker *c, const Decl *d, uint32_t fam) {
+  const Machine *m = c->m;
+  const FamilyInfo *f = &m->families[fam];
+  uint32_t k, i;
+  for (k = 0; k < f->param_count; k++) {
+    uint32_t gens = 0;
+    for (i = 0; i < f->ctor_count; i++)
+      gens += m->ctors[f->first_ctor + i].field_count == 1u && cell_param(f, m->ctors[f->first_ctor + i].fields[0].type, 0u) == k;
+    if (gens == 0u)
+      return FAIL(c, "REFUSE_CELL", "%s is not a cell signature: the type parameter %s occurs in no constructor (rule R1)", f->name, d->params[k].name);
+    if (gens > 1u)
+      return FAIL(c, "REFUSE_CELL", "%s is not a cell signature: the type parameter %s has %u generators (rule R1)", f->name, d->params[k].name, (unsigned)gens);
+  }
+  return 1;
+}
+
 /* A recursive field must be the whole field type, the family at its own
    parameters. The EARLIER point fields are locals (S4 item 13). */
-static int check_field(Checker *c, uint32_t fam, const Field *field, FieldInfo *out, uint32_t earlier) {
+static int check_field(Checker *c, uint32_t fam, const Field *field, FieldInfo *out, uint32_t earlier, size_t field_count) {
   uint64_t level = 0;
   const Core *t;
   if (!name_free(c, field->name))
@@ -3089,6 +3225,8 @@ static int check_field(Checker *c, uint32_t fam, const Field *field, FieldInfo *
   c->field_dep = 0;
   c->field_rec = 0;
   t = check_type(c, field->type, &level);
+  if (t != NULL && has_type_param(c->m, &c->m->families[fam]))
+    t = quote_value(c->m, c->level, here(c, t));
   c->field_top = c->field_base;
   if (t == NULL)
     return 0;
@@ -3102,6 +3240,8 @@ static int check_field(Checker *c, uint32_t fam, const Field *field, FieldInfo *
   out->dependent = c->field_dep;
   out->over_recursive = c->field_rec;
   out->history = field->history;
+  if (has_type_param(c->m, &c->m->families[fam]) && !cell_field(c, fam, out, earlier, field_count))
+    return 0;
   if (out->recursive && !own_family(c->m, fam, t, earlier))
     return FAIL(c, "DOMAIN_FAMILY", "the recursive field %s must have the type %s at its own parameters", field->name, c->m->families[fam].name);
   return 1;
@@ -3296,7 +3436,7 @@ static int check_ctor(Checker *c, uint32_t fam, const Ctor *ctor, uint32_t slot)
       return FAIL(c, "HIT_BOUNDARY", "the point field %s of %s must come before the interval fields", ctor->fields[j].name, ctor->name);
     if (interval && !name_free(c, ctor->fields[j].name))
       return 0;
-    if (!interval && !check_field(c, fam, &ctor->fields[j], &fields[j], (uint32_t)points))
+    if (!interval && !check_field(c, fam, &ctor->fields[j], &fields[j], (uint32_t)points, ctor->field_count))
       return 0;
     if (!interval) {
       path_field(m, fam, fields, (uint32_t)points);
@@ -3462,12 +3602,17 @@ static int check_header(Checker *c, const Decl *d, uint32_t fam, uint32_t first,
   for (i = 0; i < d->param_count; i++) {
     uint64_t level = 0;
     params[i] = check_type(c, d->params[i].type, &level);
+    /* Expose universe and higher-kind aliases before the cell check. */
+    if (params[i] != NULL)
+      params[i] = quote_value(m, c->level, here(c, params[i]));
     if (params[i] == NULL || !push(c, d->params[i].name, here(c, params[i])))
       return 0;
   }
   for (t = d->index, i = 0; t != NULL && t->kind == TERM_PI; t = t->right, i++) {
     uint64_t level = 0;
     indices[i] = check_type(c, t->left, &level);
+    if (indices[i] != NULL)
+      indices[i] = quote_value(m, c->level, here(c, indices[i]));
     if (indices[i] == NULL || !push(c, t->name == NULL ? "_" : t->name, here(c, indices[i])))
       return 0;
   }
@@ -3525,6 +3670,8 @@ static int check_family(Checker *c, const Decl *d) {
       if (!header_order(c, d, s, count) || !check_header(c, &d[s], first + s, first, count, universes[s]))
         return 0;
     }
+    if (!cell_header(c, d, first, count))
+      return 0;
     for (pass = 0; pass < 2; pass++) {
       for (s = 0; s < count; s++) {
         const FamilyInfo *f = &m->families[first + s];
@@ -3548,6 +3695,11 @@ static int check_family(Checker *c, const Decl *d) {
     if (!changed)
       break;
   }
+  /* Earlier sorts of this block now have complete constructor signatures. */
+  if (!cell_header(c, d, first, count))
+    return 0;
+  if (count == 1u && has_type_param(m, &m->families[first]) && !cell_generators(c, d, first))
+    return 0;
   return d->origin != ORIGIN_PROGRAM && count == 1u && strcmp(d->name, "Out") == 0 ? check_events(c, first) : 1;
 }
 

@@ -1,4 +1,4 @@
--- REFUSE_LOWER (slice S4, PLAN section 8, O22): the agree fold of a formal hcomp at Orbit (a quotEq face, a base that reads the state) is an hcomp at Choice, elim on that hcomp stays neutral, and a neutral elim at a word position is not a word.
+-- REFUSE_LOWER (slice S4, PLAN section 8, O22): the agree fold of a formal hcomp at Orbit (an orbitEq face, a base that reads the state) is an hcomp at Choice, elim on that hcomp stays neutral, and a neutral elim at a word position is not a word.
 state State := makeState (count : U256)
 def init : State := makeState 0u
 
@@ -76,7 +76,7 @@ def agreeAct : (g : Group) -> (d : Member -> Choice) -> Path Choice (agree0 (act
   fun (g : Group) (d : Member -> Choice) => elim (fun (h : Group) => Path Choice (agree0 (act h d)) (agree0 d))
     (fun (u : Unit) => refl) (fun (u : Unit) => sameFlip (d (inl unit)) (d (inr unit))) g
 
--- The invariant fold: the quotEq case is agreeAct after the path of r, the quotSquash case is isSetChoice.
+-- The invariant fold: the orbitEq case is agreeAct after the path of r, the orbitSquash case is isSetChoice.
 def agree : Orbit -> Choice :=
   fun (z : Orbit) => fold agree0
     (fun (a : Member -> Choice) (b : Member -> Choice) (r : R a b) =>
@@ -88,5 +88,5 @@ def allA : Member -> Choice := fun (m : Member) => inl unit
 def spin : (env : Env) -> (s : State) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) =>
     some (pair (makeState (elim (fun (c : Choice) => U256) (fun (u : Unit) => count s) (fun (u : Unit) => 0u)
-      (agree (hcomp Orbit i0 (fun (i : I) => [ i0 -> quotEq (Member -> Choice) R (act (inr unit) allA) allA (pack (inr unit) refl) i ])
+      (agree (hcomp Orbit i0 (fun (i : I) => [ i0 -> orbitEq (act (inr unit) allA) allA (pack (inr unit) refl) i ])
         (orbitProj (fun (m : Member) => flagIf (u256Eq (count s) 0u) (inl unit) (inr unit))))))) nil)

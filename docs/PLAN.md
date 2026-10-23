@@ -365,7 +365,7 @@ The ring size bounds the gas of `claim` (O17).
 | S0 | Seed: the template with the tcc-evm-contract host, the design verbatim, this plan, the kit gate GREEN, the private remote | DONE |
 | S1 | USER rulings on the questions of section 11; record them in this plan | DONE |
 | S2 | Kernel port from orbit-lang 2162fb2 (section 6); the gate counts of orbit-lang | DONE (2026-10-22): examples 41, parse refusals 19, check refusals 171, kit-only refusals 22, evals 159, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
-| S3 | R1 narrowing: `REFUSE_CELL`, the free monoid, the former matrix as CM and CC rows (port from intent-lang S3 when it exists) | PLANNED |
+| S3 | R1 narrowing: `REFUSE_CELL`, the free monoid, the former matrix as CM and CC rows (port of intent-lang 32c1d13) | DONE (2026-10-23): examples 44, parse refusals 19, check refusals 172, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 199, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S4 | `Trace` as the free category CM in a slice; the category laws; the meaning functor; `Stream` of batches (CC) | PLANNED |
 | S5 | Part P: `Pos`, `Pool k`, `swapIn`, `swapOut`, the least-solution law, `addLiq`, `removeLiq`, the overflow bound | DONE (2026-10-22): examples 42, parse refusals 19, check refusals 171, pool refusals 4, kit-only refusals 22, evals 180, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S6 | Part B: credit, `InFlight`, `deposit`, `seal`, `accept`, `claim` on the guest side; conservation; `ua e` transport | DONE (2026-10-22): examples 43, parse refusals 19, check refusals 171, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 199, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
@@ -443,6 +443,53 @@ The ring size bounds the gas of `claim` (O17).
   `examples/pool.lang` and its rows stay as committed. Builder call.
 - O24: `test/gate.sh` line 52, `refusals test/bridge bridge
   examples/bridge.lang` (the S5 form; no new harness). Builder call.
+- O25: the S3 port base is intent-lang 32c1d13 on aacc8ad: `git diff
+  aacc8ad 32c1d13` without docs/PLAN.md and docs/STATUS.md, with
+  `intent-lang` renamed `bridge-lang`. The patch applied clean: 34 paths,
+  no reject, offsets only in `src/front/check.c` and `test/fronttool.c`.
+  Builder call.
+- O26: local lines kept against the patch (S2-port drift; bridge-lang S2
+  took orbit-lang 2162fb2, intent-lang aacc8ad has a later text):
+  `docs/host/README.md` lines 3 and 310 (the orbit text);
+  `src/front/check.c` the zkProve local name `ballot_type` and its
+  message, the zkProject argument check form and one DOMAIN_FAMILY
+  message (line 3403); `src/front/eval.c` line 2525 has no constant-line
+  `transp` rule at `ZkBallot` (intent-lang 32c1d13 has one, O31).
+  `src/front/front.c` differs only by the `bridge-lang` rename. Same
+  behavior class on the gate.
+  Builder call.
+- O27: bridge-lang-only rows kept: `test/eval/expect.txt` 21 pool rows
+  and 19 bridge rows after line 159 (the patch rewrote 9 rows in place:
+  formers `xs`, quot `toTrunc3`, 7 elim rows); `test/fronttool.c` keeps
+  the orbit `Evil` DOMAIN_FAMILY case and the `impossible : Fin 0` case.
+  The 7 intent-lang aacc8ad cases that bridge-lang lacks are Q-S3-2.
+  Builder call.
+- O28: the bridge-lang-only files (`examples/pool.lang`,
+  `examples/bridge.lang`, `test/pool/*`, `test/bridge/*`) check unchanged
+  after the port: they use the kit `List`, `nil`, `cons`, `unfold` and
+  `fold` under `--kit`, and `REFUSE_CELL` on `List` is guest mode only.
+  Pool refusals 4, bridge refusals 3, the 21 pool and 19 bridge eval rows
+  at their values. Verified by the gate.
+- O29: the Q-S6-2 (a) probe, a scratch copy of `examples/bridge.lang`
+  with `InFlight := Bag Msg` and `sumCredit` as the elim of `Bag` into
+  `U256`: the first diagnostic is `PATH_END: addAssoc: the path at i1 is
+  u256Add (u256Add a b) c, but the type needs u256Add a (u256Add b c)`.
+  Each lemma alone: `u256Add` assoc, comm, left unit and right unit at
+  open words PATH_END; `isSet U256` PATH_UIP; `flagOr` assoc and comm
+  PATH_END; `flagOr flagNo a = a` ok; `isSet Flag` PATH_UIP. So
+  `InFlight` stays `List Msg` (Q-S3-1). Builder call.
+- O30: a "USER ruling Q-S3-n" citation in a ported file names the
+  intent-lang PLAN ruling, not a bridge-lang one, as the S2-port texts
+  cite orbit-lang rulings: `domain/domain.lang` cites Q-S3-5, Q-S3-6,
+  Q-S3-7 and Q-S3-8; `examples/freemon.lang` and `src/front/check.c`
+  cite Q-S3-5. The bridge-lang S3 questions are in section 11.
+- O31: the fronttool drift probe (scratch copy of the tree with the 7
+  intent-lang aacc8ad cases): 6 pass on the bridge-lang checker; the
+  `constant` case (`transp (fun (_ : I) => ZkBallot C) i0 b` is `b` by
+  refl) fails with PATH_END. The gap is `src/front/eval.c` line 2525
+  (`case OP_ZK_BALLOT: break;` in the transp reduction); intent-lang
+  32c1d13 returns the base there when the two ends of the line convert.
+  No repo change (Q-S3-2). Builder call.
 
 ## 11. Questions for the USER (S1)
 
@@ -540,4 +587,29 @@ All ten are RULED (S1, 2026-10-22; the quote is in section 1).
   two sides. RECOMMENDED. (b) a larger arena, or a lazy Glue transport at
   a Sigma (a src change; the limit is at `src/front/eval.c` line 90).
 
-Q-S2-1, Q-S5-1 and Q-S5-2 stay OPEN.
+### S3 questions (OPEN)
+
+- Q-S3-1 (the `InFlight` carrier after the S3 port; from Q-S6-2 (a)).
+  The probe (O29) shows that a fold out of `Bag Msg` into `U256` needs
+  four rules at open words: `u256Add` assoc, comm and left unit
+  (PATH_END) and `isSet U256` (PATH_UIP). (a) keep `InFlight := List Msg`
+  (a kit file; `examples/bridge.lang` is in `examples/kit.txt`) until a
+  later slice. RECOMMENDED. (b) kit path rules for `u256Add` (assoc, comm
+  and unit) and a set rule for `U256` (a src change: the BUILTINS table of
+  `src/front/check.c`, `u256Add` at line 187, and the PATH_UIP site), so
+  that `sumCredit` checks; `inBatch` also needs `flagOr` assoc and comm
+  and `isSet Flag`, and `removeMsg` the same at `Prod Flag (Prod InFlight
+  InFlight)`. (c) `InFlight := FreeMon Msg` with `fmFold`: it takes
+  `isSet U256` and the `u256Add` laws as arguments, so it needs the (b)
+  rules too.
+- Q-S3-2 (the 7 intent-lang aacc8ad fronttool cases, O27 and O31). (a)
+  add the 6 cases that pass as regression cases in a later slice (no src
+  change), and port the constant-line `transp` rule at `ZkBallot` from
+  intent-lang 32c1d13 `src/front/eval.c` (the gap is bridge-lang
+  `src/front/eval.c` line 2525) with the seventh case in the S7 port.
+  RECOMMENDED. (b) add the 6 cases now and leave the seventh out. (c)
+  leave all 7 out; the intent-lang review cases are not bridge-lang work.
+
+Q-S2-1, Q-S5-1, Q-S5-2, Q-S6-1, Q-S6-2 and Q-S6-3 stay OPEN. Q-S6-2 (a)
+is the S6 form; the S3 probe (O29) did not make the change, so Q-S3-1
+carries the carrier question.

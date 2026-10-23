@@ -1,5 +1,5 @@
 -- The Orbit quotient (slice S4, PLAN section 8), guest mode: the design signature slots and act of signature.lang.
--- The kernel gives Orbit := Quot (Member -> Choice) R and orbitProj directly after act (R is the relation below, inline).
+-- The kernel gives the family Orbit (orbitProj, orbitEq, orbitSquash) directly after act; its orbitEq field has the type R a b below, unfolded.
 def Member : Type 0 := Sum Unit Unit
 def Choice : Type 0 := Sum Unit Unit
 def Outcome : Type 0 := Choice
@@ -68,9 +68,9 @@ def allA : Member -> Choice := fun (m : Member) => inl unit
 def allB : Member -> Choice := fun (m : Member) => inr unit
 def split : Member -> Choice := fun (m : Member) => m
 
--- The glue path: act (inr unit) sends allA to allB, so quotEq gives a path in Orbit.
+-- The glue path: act (inr unit) sends allA to allB, so orbitEq gives a path in Orbit.
 def flipSame : Path Orbit (orbitProj allB) (orbitProj allA) :=
-  fun (i : I) => quotEq (Member -> Choice) R (act (inr unit) allA) allA (pack (inr unit) refl) i
+  fun (i : I) => orbitEq (act (inr unit) allA) allA (pack (inr unit) refl) i
 
 -- same x y is inl unit when x and y are equal and inr unit when not. No eta for Unit, so flipFlip needs elim on the payload too.
 def same : Choice -> Choice -> Choice :=
@@ -89,7 +89,7 @@ def agreeAct : (g : Group) -> (d : Member -> Choice) -> Path Choice (agree0 (act
   fun (g : Group) (d : Member -> Choice) => elim (fun (h : Group) => Path Choice (agree0 (act h d)) (agree0 d))
     (fun (u : Unit) => refl) (fun (u : Unit) => sameFlip (d (inl unit)) (d (inr unit))) g
 
--- The invariant fold: the quotEq case is agreeAct after the path of r, the quotSquash case is isSetChoice.
+-- The invariant fold: the orbitEq case is agreeAct after the path of r, the orbitSquash case is isSetChoice.
 def agree : Orbit -> Choice :=
   fun (z : Orbit) => fold agree0
     (fun (a : Member -> Choice) (b : Member -> Choice) (r : R a b) =>

@@ -37,7 +37,7 @@ scope described in `docs/PLAN.md`, section 8.
 | After K4d | None: the kit slices end at K4d; the orbit-lang slices follow | Closed |
 | S2 | sealed-lang S2 port: base span: `natDiv`, `natMod`, `hash`, `addrToU256`, `ecrecover`, `ecAdd`, `ecMul`, `ecPairing`; four kit operations pruned | Done |
 | S2 | sealed-lang S3 port: interval paths: `I`, `PathP`, `Path`, `refl`, `sym`, `cong`, `funExt`, `transp`, `hcomp`; the kit `Eq` removed | Done |
-| S2 | sealed-lang S4 port: HITs and QITs: path constructors in `family`, `fold` with path cases, S1, Trunc1, Trunc0 and Quot in `domain/domain.lang`; erased at a word position | Done |
+| S2 | sealed-lang S4 port: HITs and QITs: path constructors in `family`, `fold` with path cases, S1, Trunc1, Trunc0 and Quot in `domain/domain.lang` (bridge-lang S3 removes Quot, rule R1); erased at a word position | Done |
 
 
 ## U256 and Addr (slice K2)
@@ -100,7 +100,7 @@ state State := makeState (owner : Addr) (held : U256) history (earned : U256) (c
 - The word `history` marks each field of the next `(...)` group as a history field. A history field must have the type `Nat` or `U256`.
 - `history` is not a reserved word. It has this function only in the field list of a state.
 - Each field name is a projection, as in a family. For example, `held s` is the `held` field of the state `s`.
-- If a state does not obey these rules, the checker gives `REFUSE_STATE`. A `family` in a program is still `REFUSE_DATA`. An index telescope and an `and` block are also for `domain/domain.lang` only (orbit-lang S6). A state with an index telescope gives `REFUSE_STATE`.
+- If a state does not obey these rules, the checker gives `REFUSE_STATE`. A `family` in a program is still `REFUSE_DATA`. A domain family with a type parameter that is not a cell signature gives `REFUSE_CELL` (rule R1, S3). A guest `List`, `nil`, `cons` or `unfold` also gives `REFUSE_CELL`: `List` is the kit host ABI, and a guest program uses `FreeMon` in its place. An index telescope and an `and` block are also for `domain/domain.lang` only (orbit-lang S6). A state with an index telescope gives `REFUSE_STATE`.
 
 The type of a definition gives its role. There is no keyword for a role.
 

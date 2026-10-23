@@ -3,20 +3,20 @@
 -- charter and a rule ratified at it, and adoptTwice is law 4: a second
 -- adoption of the same rule is a path from the first. The rules are Size
 -- values, as Nat is internal.
-def charterZero : Charter Size := genesis Size
-def ratifiedZero : Ratified Size charterZero := ratify Size charterZero sz0
-def charterOne : Charter Size := adopt Size charterZero ratifiedZero
-def charterTwo : Charter Size := adopt Size charterOne (ratify Size charterOne sz0)
-def adoptLaw : Path (Charter Size) charterOne charterTwo :=
-  fun (i : I) => adoptTwice Size charterZero sz0 i
+def charterZero : Charter := genesis
+def ratifiedZero : Ratified charterZero := ratify charterZero sz0
+def charterOne : Charter := adopt charterZero ratifiedZero
+def charterTwo : Charter := adopt charterOne (ratify charterOne sz0)
+def adoptLaw : Path (Charter) charterOne charterTwo :=
+  fun (i : I) => adoptTwice charterZero sz0 i
 -- The block fold (S6 B3): one target for each sort, then the cases of
 -- Charter (genesis, adopt, adoptTwice, charterSquash) and of Ratified
 -- (ratify, ratifiedSquash) in slot order, then the value. A recursive
 -- field arrives folded at the target of its sort. adopted is sz0 at
 -- genesis and szS sz0 after an adoption, so the adoptTwice case is a
 -- constant path.
-def adopted : Charter Size -> Trunc0 Size :=
-  fun (c : Charter Size) => fold (Trunc0 Size) (Trunc0 Size)
+def adopted : Charter -> Trunc0 Size :=
+  fun (c : Charter) => fold (Trunc0 Size) (Trunc0 Size)
     (trunc0 Size sz0)
     (fun (b : Trunc0 Size) (r : Trunc0 Size) => trunc0 Size (szS sz0))
     (fun (b : Trunc0 Size) (w : Size) => fun (i : I) => trunc0 Size (szS sz0))

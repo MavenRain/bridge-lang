@@ -34,16 +34,29 @@ general recursion. Recursion comes only from `fold` and `unfold` (F6, F7).
 The compiler writes the target; a program cannot.
 
 Only `domain/domain.lang` declares a family; a `family` in a program gives
-`REFUSE_DATA`. A domain family can have an index telescope after its
-parameters: `family Bag (A : Type 0) : Size -> Type 0 := ...`, a Pi
+`REFUSE_DATA`. A family with a type parameter is a type constructor, so it
+must be a cell signature (rule R1, S3): only type parameters, no `and`
+block, each type parameter the one field of exactly one generator
+constructor, and each other point field closed base data (independent of
+the parameters and earlier fields), the family at its own parameters or
+a path in it. Aliases in headers and cell field types are normalized before
+this shape check. Packing a type argument into data, including a Sigma or
+a closed family, does not bypass the check. Higher-kinded parameters and type indices are refused: type
+arguments must be uniform universe parameters of a cell signature.
+Else the checker gives `REFUSE_CELL`.
+The cons list `List` (with `nil`, `cons` and `unfold`) is the kit host ABI:
+a guest program that names one gives `REFUSE_CELL` and uses `FreeMon` of
+`domain/domain.lang` in its place.
+A domain family can have an index telescope after its
+parameters: `family ChoiceBag : Size -> Type 0 := ...`, a Pi
 telescope that ends in `Type 0`. Each constructor of an indexed family
-states its result after its fields: `bagNil : Bag A sz0`. A path
+states its result after its fields: `choiceNil : ChoiceBag sz0`. A path
 constructor states it after its interval fields and before its boundary.
 A constructor with no result, a result whose head is not the family at its
 parameters, or an end of a path constructor at another index gives
 `HIT_INDEX`. The keyword `and` joins the sorts of an inductive-inductive
-block: `family Charter (R : Type 0) := ... and Ratified (R : Type 0) :
-Charter R -> Type 0 := ...`. The headers bind first, then the point
+block: `family Charter := ... and Ratified : Charter -> Type 0 := ...`
+(no type parameter: S3 fixes the rule type to `Size`, rule R1). The headers bind first, then the point
 constructors of all sorts, then the path constructors. A header that names
 its own sort or a later sort of its block gives `BLOCK_ORDER`. A fold over
 an indexed family has one constant target, as a fold over a uniform family

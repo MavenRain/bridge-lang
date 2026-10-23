@@ -2,8 +2,8 @@
 -- constructor of each sort. This fold has no ratifiedSquash case, so the
 -- target of Ratified has no isSet proof (S6, a missing coherence case in
 -- a block).
-def f : Charter Size -> Trunc0 Size :=
-  fun (c : Charter Size) => fold (Trunc0 Size) (Trunc0 Size)
+def f : Charter -> Trunc0 Size :=
+  fun (c : Charter) => fold (Trunc0 Size) (Trunc0 Size)
     (trunc0 Size sz0)
     (fun (b : Trunc0 Size) (r : Trunc0 Size) => trunc0 Size (szS sz0))
     (fun (b : Trunc0 Size) (w : Size) => fun (i : I) => trunc0 Size (szS sz0))

@@ -335,15 +335,15 @@ int main(void) {
                "def result : Path Nat (fold 0 (fun a => a) refl (vc Nat 7)) 7 := refl", NULL);
   /* A transport's printed result must still inhabit the destination fibre. */
   ok &= normal_roundtrip_in("family Sz := zs | ss (pred : Sz)\n"
-                            "family V (A : Type 0) : Sz -> Type 0 := vn : V A zs",
+                            "family V (A : Type 0) : Sz -> Type 0 := vn : V A zs | vg (vgOf : A) : V A zs",
                             "V Nat zs", "transp (fun (i : I) => V Nat zs) i0 (vn Nat)");
   ok &= normal_roundtrip_in("family Sz := zs | ss (pred : Sz) "
                             "| edge (i : I) [ ~i -> zs, i -> ss zs ]\n"
                             "family V : Sz -> Type 0 := vn : V zs | vc : V (ss zs)",
                             "V (ss zs)", "transp (fun (i : I) => V (edge i)) i0 vn");
-  ok &= normal_roundtrip_in("family Even (A : Type 0) := ez | es (oddPrev : Odd A) "
-                            "and Odd (A : Type 0) := os (evenPrev : Even A)",
-                            "Even Nat", "transp (fun (i : I) => Even Nat) i0 (es Nat (os Nat (ez Nat)))");
+  ok &= normal_roundtrip_in("family Even := ez | es (oddPrev : Odd) "
+                            "and Odd := os (evenPrev : Even)",
+                            "Even", "transp (fun (i : I) => Even) i0 (es (os ez))");
   ok &= domain("family Even := ez | es (oddPrev : Odd) and Odd := os (evenPrev : Even)\n"
                "def result : Nat := fold 0 (fun n => natAdd n 1) (es (os ez))", "TYPE_MISMATCH");
   /* Block folds print their targets before their constructor cases. */
@@ -371,14 +371,14 @@ int main(void) {
                "def result : Path Nat 7 7 := fun (i : I) => "
                "fold Nat Unit (fun x y p => elim (fun (u : Unit) => Nat) 7 (p @ i)) unit (box item item refl)", NULL);
   /* Every sort's cases must use the scrutinee's parameter telescope. */
-  ok &= domain("family F (A : Type 0) := makeF (fValue : A) and G (n : Nat) := makeG\n"
+  ok &= domain("family F (m : Flag) := makeF (fValue : Nat) and G (n : Nat) := makeG\n"
                "def result : Unit := fold Unit Unit (fun x => unit) unit (makeG 7)", "TYPE_MISMATCH");
-  ok &= domain("family F (A : Type 0) := makeF (fValue : A) and G := makeG\n"
+  ok &= domain("family F (m : Nat) := makeF (fValue : Nat) and G := makeG\n"
                "def result : Unit := fold Unit Unit (fun x => unit) unit makeG", "TYPE_MISMATCH");
-  ok &= domain("family L (A : Type 0) (a : A) := leftL (lValue : A) "
-               "and R (A : Type 0) (a : A) := rightR (rLeft : L A a)\n"
-               "def firstL : Path Nat (fold Nat Unit (fun n => n) (fun n => unit) (leftL Nat 7 8)) 8 := refl\n"
-               "def secondR : Path Unit (fold Nat Unit (fun n => n) (fun n => unit) (rightR Nat 7 (leftL Nat 7 8))) unit := refl", NULL);
+  ok &= domain("family L (n : Nat) (e : Path Nat n n) := leftL (lValue : Nat) "
+               "and R (n : Nat) (e : Path Nat n n) := rightR (rLeft : L n e)\n"
+               "def firstL : Path Nat (fold Nat Unit (fun v => v) (fun v => unit) (leftL 7 refl 8)) 8 := refl\n"
+               "def secondR : Path Unit (fold Nat Unit (fun v => v) (fun v => unit) (rightR 7 refl (leftL 7 refl 8))) unit := refl", NULL);
   /* Header folds must not see the zeroed, reserved constructor signatures. */
   ok &= domain("family A := a (n : Nat) and B (x : A) (y : fold Unit x) := b\n"
                "def value : B (a 0) unit := b (a 0) unit", "HIT_BOUNDARY");
@@ -387,14 +387,71 @@ int main(void) {
                "def small : Type 0 := Low", "TYPE_MISMATCH");
   ok &= domain("family Low := low (high : High) and High := highCtor (big : Type 0)\n"
                "def large : Type 1 := Low", NULL);
-  ok &= domain("family F (A : Type 0) : ((G : Type 0) -> G -> G) -> Type 0 := "
-               "mk (x : (T : Type 0) -> T -> T) : F A x and G := g", NULL);
-  ok &= domain("family F (G : Type 0) : G -> Type 0 := mk (x : G) : F G x and G := g", NULL);
+  ok &= domain("family F : ((G : Type 0) -> G -> G) -> Type 0 := "
+               "mk (x : (T : Type 0) -> T -> T) : F x and G := g", NULL);
+  ok &= domain("family F (G : Nat) : Path Nat G G -> Type 0 := mk (x : Path Nat G G) : F G x and G := g", NULL);
   ok &= domain("state State : Nat -> Type 0 := st (counter : Nat) : State counter", "REFUSE_STATE");
   ok &= domain("family U := u\n"
                "family T := pt (value : Nat) | arc (i : I) "
                "[ ~i -> pt (fold 0 u), i -> pt (fold 0 u) ]", NULL);
-  ok &= domain("family T (A : Type 0) := leafT (v : A) | nodeT (l : T Nat) (r : T A)", "DOMAIN_FAMILY");
+  ok &= domain("family T (n : Nat) := leafT (v : Nat) | nodeT (l : T 0) (r : T n)", "DOMAIN_FAMILY");
+  /* A type constructor is a cell signature (S3, rule R1): a cons list, a
+     value parameter, a parameter in no constructor, an and block and two
+     generators for one parameter (open point QA1) are refused. */
+  ok &= domain("family Lst (A : Type 0) := lstNil | lstCons (lstHead : A) (lstTail : Lst A)", "REFUSE_CELL");
+  ok &= domain("family Tagged (A : Type 0) (n : Nat) := tagged (taggedOf : A)", "REFUSE_CELL");
+  ok &= domain("family Phantom (A : Type 0) := phantom", "REFUSE_CELL");
+  ok &= domain("family Even (A : Type 0) := ez | es (oddPrev : Odd A) and Odd (A : Type 0) := os (evenPrev : Even A)", "REFUSE_CELL");
+  ok &= domain("family Two (A : Type 0) := genL (genLOf : A) | genR (genROf : A)", "REFUSE_CELL");
+  /* Aliases and indices must not hide type arguments from the cell check. */
+  ok &= domain("def U : Type 1 := Type 0\n"
+               "family AliasList (A : U) := aliasNil | aliasCons (aliasHead : A) (aliasTail : AliasList A)", "REFUSE_CELL");
+  ok &= domain("def U : Type 1 := Type 0\n"
+               "family AliasCell (A : U) := aliasEta (aliasValue : A)", NULL);
+  /* Generator types are compared after unfolding aliases, just as headers. */
+  ok &= domain("def Id : Type 0 -> Type 0 := fun (A : Type 0) => A\n"
+               "family AliasGen (A : Type 0) := aliasGen (aliasGenOf : Id A)", NULL);
+  ok &= domain("def Id : Type 0 -> Type 0 := fun (A : Type 0) => A\n"
+               "family AliasGens (A : Type 0) (B : Type 0) := aliasA (aliasAOf : Id A) | aliasB (aliasBOf : Id B)", NULL);
+  ok &= domain("def Id : Type 0 -> Type 0 := fun (A : Type 0) => A\n"
+               "family AliasList (A : Type 0) := aliasNil | aliasCons (aliasHead : Id A) (aliasTail : AliasList A)", "REFUSE_CELL");
+  ok &= domain("family IndexedList : Type 0 -> Type 0 := idxNil (idxA : Type 0) : IndexedList idxA "
+               "| idxCons (idxB : Type 0) (idxHead : idxB) (idxTail : IndexedList idxB) : IndexedList idxB", "REFUSE_CELL");
+  ok &= domain("def U : Type 1 := Type 0\n"
+               "family IndexedAlias : U -> Type 0 := indexedAlias (indexedType : U) : IndexedAlias indexedType", "REFUSE_CELL");
+  ok &= domain("family Hkt (F : Type 0 -> Type 0) := hktNil | hktNode (hktValue : F Nat) (hktTail : Hkt F)", "REFUSE_CELL");
+  ok &= domain("def Kind : Type 1 := Type 0 -> Type 0\n"
+               "family HktAlias (F : Kind) := hktAliasNil", "REFUSE_CELL");
+  /* Packing a type in data must not recover a forbidden type constructor. */
+  ok &= domain("family Wrapped (p : Sigma (A : Type 0) Unit) := wrappedNil "
+               "| wrappedCons (wrappedHead : witness p) (wrappedTail : Wrapped p)", "REFUSE_CELL");
+  ok &= domain("family Nested (p : Sigma (n : Nat) (Sigma (A : Type 0) Unit)) := nested", "REFUSE_CELL");
+  ok &= domain("family IndexedWrapped : (Sigma (A : Type 0) Unit) -> Type 0 := "
+               "indexedNil (indexedP : Sigma (A : Type 0) Unit) : IndexedWrapped indexedP "
+               "| indexedCons (indexedQ : Sigma (A : Type 0) Unit) (indexedH : witness indexedQ) "
+               "(indexedT : IndexedWrapped indexedQ) : IndexedWrapped indexedQ", "REFUSE_CELL");
+  ok &= domain("family TypeBox := typeBox (boxType : Type 0)\n"
+               "family Boxed (p : TypeBox) := boxedNil | boxedCons (boxedHead : boxType p) (boxedTail : Boxed p)", "REFUSE_CELL");
+  ok &= domain("def U : Type 1 := Type 0\n"
+               "family TypeBox := typeBox (boxType : U)\n"
+               "family Boxed (p : TypeBox) := boxed", "REFUSE_CELL");
+  ok &= domain("family TypeBox := boxNext (boxPrev : TypeBox) | boxType (boxOf : Type 0)\n"
+               "family Boxed : TypeBox -> Type 0 := boxed (boxedType : TypeBox) : Boxed boxedType", "REFUSE_CELL");
+  ok &= domain("family TypeBox := typeBox (boxType : Type 0) and Boxed (p : TypeBox) := boxed", "REFUSE_CELL");
+  /* A higher universe alone does not make polymorphic values type arguments. */
+  ok &= domain("family PolyBox := polyNext (polyPrev : PolyBox) "
+               "| polyBox (polyFn : (A : Type 0) -> A -> A)\n"
+               "family PolyValue (p : PolyBox) := polyValue", NULL);
+  ok &= domain("family PolyValue (p : Sigma (n : Nat) ((A : Type 0) -> A -> A)) := polyValue", NULL);
+  /* Fixed operation labels are closed base data in a cell signature. */
+  ok &= domain("family Labelled (A : Type 0) := labelledEta (labelledValue : A) "
+               "| labelledNode (labelledTag : Nat) (labelledTail : Labelled A)", NULL);
+  ok &= domain("family ClosedFn (A : Type 0) := closedEta (closedValue : A) "
+               "| closedNode (closedLabel : (n : Nat) -> Path Nat n n) (closedTail : ClosedFn A)", NULL);
+  ok &= domain("family BadLabel (A : Type 0) := badEta (badValue : A) "
+               "| badNode (badLabel : Unit -> A) (badTail : BadLabel A)", "REFUSE_CELL");
+  ok &= domain("family Wrapped (A : Type 0) := wrappedEta (wrappedValue : A) "
+               "| wrappedNode (wrappedTail : Option (Wrapped A))", "REFUSE_CELL");
   ok &= domain("family F := makeF (field : Nat) (field : Flag)", "REFUSE_NAME");
   ok &= domain("family F := makeF (makeF : Nat)", "REFUSE_NAME");
   ok &= domain("family F := makeF (firstField : Nat) (secondField : Flag)", NULL);
