@@ -1,0 +1,13 @@
+-- A false attest law is refused (S7): the Schnorr check of a wrong s is flagNo, and a Flag law is refl at closed values only (Q-S5-2).
+def g : Prod U256 U256 := pair 1u 2u
+def Point : Type 0 := Prod U256 U256
+def ptEq : Point -> Point -> Flag := fun (a : Point) (b : Point) =>
+  flagIf (u256Eq (first a) (first b)) (u256Eq (second a) (second b)) flagNo
+def pk : Point := ecMul g 7u
+def hashPt : Point -> U256 := fun (q : Point) => hash (first q) (second q)
+def schnorrOk : Point -> U256 -> Prod Point U256 -> Flag := fun (y : Point) (msg : U256) (sig : Prod Point U256) =>
+  ptEq (ecMul g (second sig)) (ecAdd (first sig) (ecMul y (hash (hash (hashPt (first sig)) (hashPt y)) msg)))
+def msg1 : U256 := hash (hash 0u 1u) 42u
+-- s = 1 is not 23 + 7 e mod r.
+def badSig : Prod Point U256 := pair (ecMul g 23u) 1u
+def attestLaw : Path Flag (schnorrOk pk msg1 badSig) flagYes := refl

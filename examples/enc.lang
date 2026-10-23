@@ -1,0 +1,46 @@
+-- The hiding monad Enc as guest code (slice S7, Q-S7-2 (a)). A program cannot
+-- declare a family (rule R1, REFUSE_DATA: test/check/enc-guest-family.lang), so
+-- Enc A is the alias Prod Unit A: the Unit slot stands for the key material,
+-- encEta is the pair, decrypt is the projection. A seal (no projection on Enc
+-- in a program; decrypt law-only) is a recorded gap (O34) until the intent-lang
+-- S5 port. The points are Size values: a guest program has no Nat literal.
+def Enc : Type 0 -> Type 0 := fun (A : Type 0) => Prod Unit A
+
+def encEta : (A : Type 0) -> A -> Enc A :=
+  fun (A : Type 0) (a : A) => pair unit a
+-- decrypt is the projection to A.
+def decrypt : (A : Type 0) -> Enc A -> A :=
+  fun (A : Type 0) (c : Enc A) => second c
+-- encBind applies f to the decrypted value.
+def encBind : (A : Type 0) -> (B : Type 0) -> Enc A -> (A -> Enc B) -> Enc B :=
+  fun (A : Type 0) (B : Type 0) (c : Enc A) (f : A -> Enc B) => f (decrypt A c)
+
+-- A quorum is one witness: open is decrypt under the quorum.
+def Quorum : Type 0 := Unit
+def open : (A : Type 0) -> Quorum -> Enc A -> A :=
+  fun (A : Type 0) (q : Quorum) (c : Enc A) => decrypt A c
+-- observe gives the truncated value: all observations are equal.
+def observe : (A : Type 0) -> Enc A -> Trunc1 A :=
+  fun (A : Type 0) (c : Enc A) => trunc1 A (decrypt A c)
+
+-- The monad laws of intent-lang PLAN 3.4, by refl at open values: both sides
+-- compute to the same term by the projection of a pair.
+def etaLaw : (A : Type 0) -> (a : A) -> Path A (decrypt A (encEta A a)) a :=
+  fun (A : Type 0) (a : A) => refl
+def bindLaw : (A : Type 0) -> (B : Type 0) -> (c : Enc A) -> (f : A -> Enc B) ->
+    Path B (decrypt B (encBind A B c f)) (decrypt B (f (decrypt A c))) :=
+  fun (A : Type 0) (B : Type 0) (c : Enc A) (f : A -> Enc B) => refl
+-- open under a quorum is decrypt.
+def openLaw : (A : Type 0) -> (q : Quorum) -> (c : Enc A) -> Path A (open A q c) (decrypt A c) :=
+  fun (A : Type 0) (q : Quorum) (c : Enc A) => refl
+-- Privacy: two observations are equal in Trunc1 A by squash1.
+def privacy : (A : Type 0) -> (c : Enc A) -> (d : Enc A) -> Path (Trunc1 A) (observe A c) (observe A d) :=
+  fun (A : Type 0) (c : Enc A) (d : Enc A) => fun (i : I) => squash1 A (observe A c) (observe A d) i
+-- A homomorphic step at a closed value: bind of eta 0 by the successor is eta 1.
+def fheHom : Path (Enc Size) (encBind Size Size (encEta Size sz0) (fun (s : Size) => encEta Size (szS s))) (encEta Size (szS sz0)) := refl
+
+-- Entries for `langc eval`.
+def two : Size := szS (szS sz0)
+def decEta : Size := decrypt Size (encEta Size two)
+def bindAt : Enc Size := encBind Size Size (encEta Size two) (fun (s : Size) => encEta Size (szS s))
+def openAt : Size := open Size unit (encEta Size (szS two))

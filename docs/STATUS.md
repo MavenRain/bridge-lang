@@ -297,3 +297,50 @@ written 5 refused, rings 6 built 2 refused, differential 28 guest evals,
 build checks 33, precompile steps 128, evm steps 43, mock 13 rows, diff
 15 rows, emit 24 executions, and the regressions (fronttool has 10 more
 cases).
+
+## S7
+
+Slice S7 s1 (the guest side of `Enc`, `decrypt`, `open`, `observe` and
+the Schnorr attestation verify, Q-S7-1 (a)) is complete. The change is
+not committed; its base is the USER commit 8077f7a (O32). The gate `make
+clean` then `make check` is GREEN, exit 0. The host and precompile rows
+wait for the intent-lang S5 and S6 commits (O33).
+
+Changes:
+
+- `examples/enc.lang` (new, guest): `Enc A := Prod Unit A`, `encEta`,
+  `decrypt`, `encBind`, `Quorum`, `open`, `observe` and the laws
+  `etaLaw`, `bindLaw`, `openLaw`, `privacy` and `fheHom` (O36). `Enc` is
+  not sealed (Q-S7-2 (a), O34).
+- `examples/elgamal.lang` (new, kit; a line in `examples/kit.txt`):
+  exponential ElGamal on G1, the sum of two ciphers, a threshold open of
+  two shares with the Lagrange weights in the exponent, a DLEQ proof of
+  a share, and one Schnorr signature as the attest (O35).
+- `test/check`: `enc-guest-family.lang` (`REFUSE_DATA`) and
+  `attest-wrong.lang` (`PATH_END`, kit).
+- `test/eval/expect.txt`: 18 rows (15 elgamal, 3 enc).
+- No src change and no domain change.
+
+Traps found in S7:
+
+- A program cannot declare a family (`REFUSE_DATA`), so a guest `Enc`
+  is an alias, not a cell family, and a `REFUSE_CELL` case on a program
+  `Enc` cannot occur (O34).
+- The kit has no `u256Mul`: each scalar that a prover computes (the
+  Schnorr s, the DLEQ z) is a literal from an off-chain computation
+  (O35).
+- The review found that `u256Sub r x` saturates at zero for x above r,
+  breaking decryption, and that omitting C1 from the DLEQ challenge
+  admits a false share. Decryption now negates x C1 as a point, the
+  challenge includes C1, and six regression rows cover both fixes
+  (O37). The valid DLEQ response was regenerated.
+
+| Count | S3 | S7 | Reason |
+|---|---|---|---|
+| examples | 44 | 46 | `enc.lang`, `elgamal.lang` |
+| check refusals | 172 | 174 | `enc-guest-family.lang`, `attest-wrong.lang` |
+| evals | 199 | 217 | 15 elgamal rows, 3 enc rows |
+
+The other counts do not change: parse refusals 19, pool refusals 4,
+bridge refusals 3, kit-only refusals 22, proves 2, contracts 2 written 5
+refused, rings 6 built 2 refused, differential 28 guest evals, runs 5.

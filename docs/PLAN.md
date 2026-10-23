@@ -369,7 +369,7 @@ The ring size bounds the gas of `claim` (O17).
 | S4 | `Trace` as the free category CM in a slice; the category laws; the meaning functor; `Stream` of batches (CC) | PLANNED |
 | S5 | Part P: `Pos`, `Pool k`, `swapIn`, `swapOut`, the least-solution law, `addLiq`, `removeLiq`, the overflow bound | DONE (2026-10-22): examples 42, parse refusals 19, check refusals 171, pool refusals 4, kit-only refusals 22, evals 180, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S6 | Part B: credit, `InFlight`, `deposit`, `seal`, `accept`, `claim` on the guest side; conservation; `ua e` transport | DONE (2026-10-22): examples 43, parse refusals 19, check refusals 171, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 199, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
-| S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | PLANNED |
+| S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | s1 DONE (2026-10-23), the guest side (Q-S7-1 (a)): examples 46, parse refusals 19, check refusals 174, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 217, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the host and precompile rows wait for intent-lang S5 and S6 (O33) |
 | S8 | `ZKBridge` as the mapping cylinder; `ZKBridge ≃ BridgeState`; bLSAG claim rings and key images | PLANNED |
 | S9 | Part D: encrypted ballots, `tallyEnc`, the tally law, liquidity Decisions, the remote enactment | PLANNED |
 | S10 | The contract of section 7: writer, two-deployment differential, gas and size rows | PLANNED |
@@ -490,6 +490,52 @@ The ring size bounds the gas of `claim` (O17).
   (`case OP_ZK_BALLOT: break;` in the transp reduction); intent-lang
   32c1d13 returns the base there when the two ends of the line convert.
   No repo change (Q-S3-2). Builder call.
+- O32: the S3 commit is the USER commit 8077f7a on ce6f9d3. Its tree
+  (290291f3) is not the staged S3 tree (ee302089). The USER edits:
+  `src/front/check.c` normalizes aliases in the field types of a cell
+  signature, refuses a type argument in data (a Sigma or a closed
+  family) and checks the header again after the constructors;
+  `SPEC.md` says so; `test/fronttool.c` has 13 more cases. The gate
+  counts do not change. Recorded in S7.
+- O33: Q-S7-1 (a) is taken: the guest side first. intent-lang has no S5
+  and no S6 commit (its top is 32c1d13), so the host ElGamal, the DLEQ
+  and Lagrange host rows and the precompile rows come with the port of
+  those commits (Q9 (a)). Builder call.
+- O34: Q-S7-2 (a) is taken: `Enc` is not sealed. A program cannot
+  declare a family (`REFUSE_DATA`, `src/front/check.c` line 4096;
+  `test/check/enc-guest-family.lang`), so `examples/enc.lang` has the
+  alias `Enc A := Prod Unit A`, and `decrypt` is the projection
+  `second`. A program can use `decrypt` out of a law, and a
+  redefinition is not `REFUSE_SIG` (the SIGNATURE rows at
+  `src/front/check.c` line 3854 have the DAO names only). The ZK splice
+  is the C string `zk_source` in `src/front/front.c` (line 53), not a
+  `kernel/` file. Builder call.
+- O35: `examples/elgamal.lang` (kit) is exponential ElGamal on G1 with
+  the generator (1, 2). The kit has no `u256Mul` (Q-S5-1), so the
+  scalars of the proofs and the Lagrange weights 2 and r - 1 (the shares
+  at 1 and 2) are literals, computed off the chain: the Schnorr s is
+  (23 + 7 e) mod r and the DLEQ z is (19 + 12 c) mod r, with e and c
+  from a frontend eval of the challenge hash. The attest message is
+  `hash (hash side n) d`; S10 gives the byte form of the contract.
+  The DLEQ challenge commits to A, B, X, C1 and d, including the
+  ciphertext base; the z literal uses that transcript.
+  Builder call.
+- O36: the laws of S7. In `examples/enc.lang` the monad laws of 3.4
+  (`etaLaw`, `bindLaw`, `openLaw`) are refl at open values (the
+  projection of a pair), `privacy` is `squash1` at open values, and
+  `fheHom` is refl at a closed value. In `examples/elgamal.lang` the
+  open law (a `Point` path) and the attest law (a `Flag` path) are refl
+  at closed values only (Q-S5-2: no rule makes a path from a Flag test).
+  A false attest law is `PATH_END` (`test/check/attest-wrong.lang`).
+  Builder call.
+- O37: the S7 review fixes two issues in `examples/elgamal.lang`.
+  `elgPoint` negates x C1 as a point instead of using the saturating
+  subtraction `u256Sub r x`, so keys above r decrypt correctly, with
+  rows for 0, r, r + 1 and the maximum U256. The DLEQ challenge now
+  includes C1: otherwise a prover can choose C1 after the challenge
+  and pass a false share. Two rows reject a concrete forgery and
+  confirm that its claimed relation is false. The valid DLEQ z was
+  recomputed for the corrected transcript.
 
 ## 11. Questions for the USER (S1)
 
@@ -613,3 +659,34 @@ All ten are RULED (S1, 2026-10-22; the quote is in section 1).
 Q-S2-1, Q-S5-1, Q-S5-2, Q-S6-1, Q-S6-2 and Q-S6-3 stay OPEN. Q-S6-2 (a)
 is the S6 form; the S3 probe (O29) did not make the change, so Q-S3-1
 carries the carrier question.
+
+### S7 questions (OPEN)
+
+- Q-S7-1 (the order of the host and precompile rows). intent-lang has no
+  S5 and no S6 commit. (a) the guest side first: `Enc`, `decrypt`,
+  `open`, `observe` and the Schnorr attestation verify as guest code and
+  laws over the kit BN254 operations, with eval rows; the host and
+  precompile rows after the intent-lang S5 and S6 commits (a port, Q9
+  (a)). RECOMMENDED, taken (O33). (b) wait for them.
+- Q-S7-2 (the seal of `Enc`). A program cannot declare a family
+  (`REFUSE_DATA`), and the checker has no seal rule and no law-only
+  rule: `fold`, `elim` and the projections are guest operations, and
+  `REFUSE_SIG` comes only from the SIGNATURE rows. (a) no src change and
+  no domain change now: `examples/enc.lang` has the alias `Enc A :=
+  Prod Unit A`, `decrypt` is the projection, the laws are refl; the seal
+  is a recorded gap (O34) until the intent-lang S5 port. RECOMMENDED,
+  taken. (b) `family Enc (A : Type 0) := encEta (encOf : A)` in
+  `domain/domain.lang` (the CM row of 2.2), not sealed; a program def
+  with one of its names is then `REFUSE_NAME`. (c) (b) and a seal rule
+  in `src/front/check.c`: a guest program cannot fold, elim or project
+  an `Enc`, and uses `decrypt` only in a law; SIGNATURE rows, so that a
+  redefinition is `REFUSE_SIG`. (d) new internal operations in the form
+  of `ZkBallot` (`src/front/core.h` line 94, the BUILTINS table, a rule
+  in the form of the `zkProject` rule, a reduction in the form of
+  `src/front/eval.c` line 1871, a `transp` case at `src/front/eval.c`
+  line 2525) and an `Enc` splice in `src/front/front.c` (the `zk_source`
+  form). A reuse of `ZkBallot` is not an option: `Enc Choice` would be
+  the private ballot type of the ZK splice.
+
+Q-S7-1 (a) and Q-S7-2 (a) are taken. Q-S2-1, Q-S3-1, Q-S3-2, Q-S5-1,
+Q-S5-2, Q-S6-1, Q-S6-2 and Q-S6-3 stay OPEN.

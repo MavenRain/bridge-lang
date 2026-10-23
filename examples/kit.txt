@@ -31,3 +31,4 @@ zk.lang
 zkcast.lang
 pool.lang
 bridge.lang
+elgamal.lang

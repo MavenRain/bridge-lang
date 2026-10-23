@@ -1,0 +1,96 @@
+-- Exponential ElGamal on BN254 G1 (slice S7, PLAN 4.6): a cipher is a pair of points, the sum of two ciphers is a cipher of the sum.
+-- A threshold open of two shares with the Lagrange weights in the exponent, and one Schnorr signature as the attest.
+-- The scalars s and the Lagrange weights are literals: the kit has no u256Mul (Q-S5-1). The generator is (1, 2).
+
+def g : Prod U256 U256 := pair 1u 2u
+def r : U256 := 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001u
+def rMinusOne : U256 := 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000000u
+def Point : Type 0 := Prod U256 U256
+def Cipher : Type 0 := Prod Point Point
+
+-- Two points are equal when both coordinates are equal.
+def ptEq : Point -> Point -> Flag := fun (a : Point) (b : Point) =>
+  flagIf (u256Eq (first a) (first b)) (u256Eq (second a) (second b)) flagNo
+
+-- enc(m, k) = (k G, m G + k pk). The sum of two ciphers encrypts the sum of the messages.
+def elgEnc : Point -> U256 -> U256 -> Cipher := fun (pk : Point) (m : U256) (k : U256) =>
+  pair (ecMul g k) (ecAdd (ecMul g m) (ecMul pk k))
+def elgAdd : Cipher -> Cipher -> Cipher := fun (a : Cipher) (b : Cipher) =>
+  pair (ecAdd (first a) (first b)) (ecAdd (second a) (second b))
+
+-- The holder of x gets m G as C2 minus x C1. Negate the point so all U256 scalars work, including x above r.
+def elgPoint : U256 -> Cipher -> Point := fun (x : U256) (c : Cipher) =>
+  ecAdd (second c) (ecMul (ecMul (first c) x) rMinusOne)
+def elgIs : U256 -> Cipher -> U256 -> Flag := fun (x : U256) (c : Cipher) (m : U256) =>
+  ptEq (elgPoint x c) (ecMul g m)
+
+-- The secret key is 7. The sum of enc(3, 11) and enc(4, 13) decrypts to 7, not to 8.
+def pk : Point := ecMul g 7u
+def cSum : Cipher := elgAdd (elgEnc pk 3u 11u) (elgEnc pk 4u 13u)
+def sumIs7 : Flag := elgIs 7u cSum 7u
+def sumIs8 : Flag := elgIs 7u cSum 8u
+
+-- Decryption uses the same scalar interpretation as ecMul at the word boundaries.
+def decryptKey : U256 -> Flag := fun (x : U256) => elgIs x (elgEnc (ecMul g x) 3u 11u) 3u
+def decryptZero : Flag := decryptKey 0u
+def decryptOrder : Flag := decryptKey r
+def decryptAboveOrder : Flag := decryptKey (u256Add r 1u)
+def decryptMax : Flag := decryptKey 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffu
+
+-- Threshold open: the shares are f(1) = 12 and f(2) = 17 of f(z) = 7 + 5 z. The Lagrange weights at 0 for {1, 2} are 2 and minus 1.
+def lag12 : Point -> Point -> Point := fun (d1 : Point) (d2 : Point) =>
+  ecAdd (ecMul d1 2u) (ecMul d2 rMinusOne)
+def openPoint : Point -> Point -> Cipher -> Point := fun (d1 : Point) (d2 : Point) (c : Cipher) =>
+  ecAdd (second c) (ecMul (lag12 d1 d2) rMinusOne)
+def openIs : Point -> Point -> Cipher -> U256 -> Flag := fun (d1 : Point) (d2 : Point) (c : Cipher) (m : U256) =>
+  ptEq (openPoint d1 d2 c) (ecMul g m)
+def d1 : Point := ecMul (first cSum) 12u
+def d2 : Point := ecMul (first cSum) 17u
+def open7 : Flag := openIs d1 d2 cSum 7u
+-- The threshold open and the direct decrypt give the same point (closed values, refl).
+def openLaw : Path Point (openPoint d1 d2 cSum) (elgPoint 7u cSum) := refl
+
+-- The hash of a point is the keccak of its two words.
+def hashPt : Point -> U256 := fun (q : Point) => hash (first q) (second q)
+
+-- A DLEQ proof (A, B, z) shows that one scalar x gives X = xG and the share d = x C1.
+-- The verifier binds A, B, X, C1 and d into the challenge, so the ciphertext base cannot be chosen afterwards.
+def dleqC : Point -> Point -> Point -> Point -> Point -> U256 := fun (a : Point) (b : Point) (x : Point) (c1 : Point) (d : Point) =>
+  hash (hash (hashPt a) (hashPt b)) (hash (hashPt x) (hash (hashPt c1) (hashPt d)))
+-- zG = A + cX and z C1 = B + c d.
+def dleqOk : Point -> Point -> Point -> Prod (Prod Point Point) U256 -> Flag :=
+  fun (x : Point) (c1 : Point) (d : Point) (p : Prod (Prod Point Point) U256) =>
+    flagIf (ptEq (ecMul g (second p)) (ecAdd (first (first p)) (ecMul x (dleqC (first (first p)) (second (first p)) x c1 d))))
+      (ptEq (ecMul c1 (second p)) (ecAdd (second (first p)) (ecMul d (dleqC (first (first p)) (second (first p)) x c1 d))))
+      flagNo
+-- Share 1: x1 = 12, X1 = 12G, d1 = 12 C1. The nonce is w = 19, and z = (19 + 12 c) mod r.
+def x1Pub : Point := ecMul g 12u
+def dleqA : Point := ecMul g 19u
+def dleqB : Point := ecMul (first cSum) 19u
+def dleqZ : U256 := 0x3003f18689c305a36b4389d5c1385252ef37c911c3896f005765b6eccc283e7au
+def dleqShare1 : Flag := dleqOk x1Pub (first cSum) d1 (pair (pair dleqA dleqB) dleqZ)
+def dleqBadZ : Flag := dleqOk x1Pub (first cSum) d1 (pair (pair dleqA dleqB) (u256Add dleqZ 1u))
+
+-- With C1 omitted from the challenge, c = H(19G, G, 12G, G), z = 19 + 12c,
+-- and C1 = ((1 + c) / z) G let a false share d = G pass both equations.
+def forgedBase : Point := ecMul g 0x1075ee60b3130a83693f13201bbe5a0152f63920898dfc9376af24cdb9932e11u
+def forgedResponse : U256 := 0x1b670e93ec86edf19116c2d0a710466e7f9d4e03b333152e658a42b7c96dfe54u
+def dleqForged : Flag := dleqOk x1Pub forgedBase g (pair (pair dleqA g) forgedResponse)
+def dleqForgedRelation : Flag := ptEq (ecMul forgedBase 12u) g
+
+-- The attest is one Schnorr signature (R, s) over msg = keccak(keccak(side, batch number), batch).
+-- The check is s G = R + e pk with e = keccak(keccak(H(R), H(pk)), msg).
+def attestMsg : U256 -> U256 -> U256 -> U256 := fun (side : U256) (n : U256) (d : U256) => hash (hash side n) d
+def schnorrOk : Point -> U256 -> Prod Point U256 -> Flag := fun (y : Point) (msg : U256) (sig : Prod Point U256) =>
+  ptEq (ecMul g (second sig)) (ecAdd (first sig) (ecMul y (hash (hash (hashPt (first sig)) (hashPt y)) msg)))
+def msg1 : U256 := attestMsg 0u 1u 42u
+-- The nonce is 23 and the key is 7, so s = 23 + 7 e mod r (an off-chain literal).
+def sSig : U256 := 0x2cf177fe294ed6d9e6828d92c2d042f90179cff96a4f8a14eb65eaa7f96d55deu
+def sig1 : Prod Point U256 := pair (ecMul g 23u) sSig
+def attestOk : Flag := schnorrOk pk msg1 sig1
+def attestBadS : Flag := schnorrOk pk msg1 (pair (ecMul g 23u) (u256Add sSig 1u))
+def attestOther : Flag := schnorrOk pk (attestMsg 1u 1u 42u) sig1
+def attestLaw : Path Flag (schnorrOk pk msg1 sig1) flagYes := refl
+
+-- A cipher with (1, 1) as C1 is off the curve: the decrypt traps (as mulBad in bn254.lang).
+def encBad : Nat -> Flag := fun (n : Nat) => elgIs 7u (pair (pair 1u 1u) (pair 1u (toU256 n))) 7u
