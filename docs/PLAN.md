@@ -124,8 +124,8 @@ swap parameter.
 
 | Name | Kind | Reading |
 |---|---|---|
-| Pos | defined | `(n : U256) * Le 1 n`, the surrogate of `R+` (section 4.2) |
-| Pool k | defined | `(x : Pos) * (y : Pos) * Le k (x * y)` (section 4.2) |
+| Pos | defined | `(n : U256) * Le 1 n`, the surrogate of `R+` (section 4.2); the name in the code is `Positive` (O20) |
+| Pool k | defined | `(x : Positive) * (y : Positive) * Le k (x * y)` (section 4.2) |
 | Step | defined | the graph of pool steps: `swapIn`, `swapOut`, `addLiq` (section 4.1) |
 | Trace | CM | the free category on `Step` (section 4.1) |
 | swapIn, swapOut | defined | exact-input and exact-output swaps (section 4.2) |
@@ -367,7 +367,7 @@ The ring size bounds the gas of `claim` (O17).
 | S2 | Kernel port from orbit-lang 2162fb2 (section 6); the gate counts of orbit-lang | DONE (2026-10-22): examples 41, parse refusals 19, check refusals 171, kit-only refusals 22, evals 159, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S3 | R1 narrowing: `REFUSE_CELL`, the free monoid, the former matrix as CM and CC rows (port from intent-lang S3 when it exists) | PLANNED |
 | S4 | `Trace` as the free category CM in a slice; the category laws; the meaning functor; `Stream` of batches (CC) | PLANNED |
-| S5 | Part P: `Pos`, `Pool k`, `swapIn`, `swapOut`, the least-solution law, `addLiq`, `removeLiq`, the overflow bound | PLANNED |
+| S5 | Part P: `Pos`, `Pool k`, `swapIn`, `swapOut`, the least-solution law, `addLiq`, `removeLiq`, the overflow bound | DONE (2026-10-22): examples 42, parse refusals 19, check refusals 171, pool refusals 4, kit-only refusals 22, evals 180, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S6 | Part B: credit, `InFlight`, `deposit`, `seal`, `accept`, `claim` on the guest side; conservation; `ua e` transport | PLANNED |
 | S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | PLANNED |
 | S8 | `ZKBridge` as the mapping cylinder; `ZKBridge ≃ BridgeState`; bLSAG claim rings and key images | PLANNED |
@@ -389,7 +389,19 @@ The ring size bounds the gas of `claim` (O17).
 - O6: `Pool k` holds `k ≤ x * y` over `U256`; swap outputs are the least
   solutions (4.2). RULED: Q3 (a).
 - O7: reserves stay below `2^128`; a larger value reverts. The S5 slice
-  checks the kit `U256` overflow behavior. Builder call.
+  checks the kit `U256` overflow behavior. Builder call. S5 result: the
+  kit `u256Add` traps on an overflow and `u256Sub` stops at 0
+  (`src/front/u256.h` lines 20 and 21). The kit has no `u256Mul` and no
+  `u256Div` (sealed-lang R19, `docs/host/README.md` line 316), so
+  `examples/pool.lang` gives `mul`, `divFloor` and `divCeil` as folds over
+  the 256 powers of two (Q-S5-1). `mul` traps on a product of `2^256` or
+  more. `divFloor` traps on a divisor of 0 and needs a divisor below
+  `2^255`. `capped r` is the bound on one word: `r` when `r` is below
+  `2^128`, else a trap. The operations use `checkedReserves x y`: it
+  checks that each new reserve is from 1 to `2^128 - 1` before it gives
+  either. A failure traps through each projection, because the evaluator
+  is lazy and a check in one field does not run when a caller reads only
+  the other field.
 - O8: liquidity keeps the price, not the product; the DAO is the only
   liquidity provider (4.3). RULED: Q4 (a).
 - O9: the bridge model: virtual credit reserves, batches, attestation,
@@ -415,6 +427,10 @@ The ring size bounds the gas of `claim` (O17).
   orbit test/gate.sh has none).
 - O19: the kanon run dirs .kanon-exec/ and .kanon-wait/ are ignored, so
   `git add -A` cannot stage them. Builder call.
+- O20: the name `Pos` (3.2) is a domain family of the DAO, the positions
+  of a bag (`domain/domain.lang` line 71, orbit-lang S7 B3). A guest
+  `def Pos` gives `REFUSE_NAME` (rule R4). So the name in the code is
+  `Positive`. Builder call.
 
 ## 11. Questions for the USER (S1)
 
@@ -467,4 +483,27 @@ All ten are RULED (S1, 2026-10-22; the quote is in section 1).
   `Pool k` is indexed by a `U256` value, not by a type, so R1 does not
   touch it; S3 and S4 come after the intent-lang S3 commit. RECOMMENDED.
   (b) wait for intent-lang S3. (c) build S3 here (this goes against Q9
-  (a)).
+  (a)). RULED: (a) (the USER ran the S5 prompt, 2026-10-22).
+
+### S5 questions (OPEN)
+
+- Q-S5-1 (kit multiply and divide). (a) keep the guest folds of
+  `examples/pool.lang`; S10 measures their gas, then decides. RECOMMENDED.
+  (b) add `u256Mul`, `u256Div` (and a ceil form) as kit operations now:
+  `src/front/check.c` BUILTINS (line 184 area), `src/front/eval.c`
+  `u256_arith` (line 1333), `src/front/u256.c` (`u256_mul` is still in
+  `src/front/u256.h` line 22), the EVM lowering in `src/lower.c`. This
+  undoes sealed-lang R19 here. (c) (b) only for the EVM form, guest folds
+  for the laws.
+- Q-S5-2 (the laws). The checker has no rule that makes a `Path Flag _
+  flagYes` proof from a Flag test (`rule_flag_if`, `src/front/check.c`
+  line 2286), so `swapIn : Pool k -> Pos -> Pool k` (4.2) cannot check
+  its law. (a) laws at fixed values: each operation takes its
+  precondition (`Lt c y`, `PriceEq`, `Share`) and a `PoolLaw` proof of
+  the new reserves as arguments and gives a `Pool k` (`removeLiq` gives
+  `(k' : U256) * Pool k'`); closed values with refl fields are the laws
+  at fixed points; evals check the boundary. Commit 44ee99d has this
+  form. RECOMMENDED. (b) a dependent Flag eliminator (a `decide` rule at
+  `rule_flag_if`), so that `swapIn : Pool k -> Positive -> Option (Pool
+  k)` checks the invariant at run time. This is a src change (the Q-S5-1
+  rulings apply).
