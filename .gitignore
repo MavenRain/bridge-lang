@@ -3,3 +3,5 @@ scratch/
 *.tmp
 __pycache__/
 build/
+.kanon-exec/
+.kanon-wait/

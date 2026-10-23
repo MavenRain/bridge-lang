@@ -21,8 +21,36 @@ USER rulings (the request, 2026-10-22):
 - R3 host: TinyCC.
 - R4 target: EVM bytecode for any EVM chain.
 
+USER rulings (S1, 2026-10-22), verbatim:
+
+> Take all recommendations for Q1-Q10 and give next session prompt
+
+Thus each question of section 11 takes its RECOMMENDED option:
+
+- Q1 (a) (O3): R1 as intent-lang ruled it. Ambient Pi, Sigma, Path and U
+  with Glue are not limited. Declared type constructors are only CM and CC.
+  The cell criterion is syntactic; cons lists are refused, the free monoid
+  is used.
+- Q2 (a) (O5): swap, liquidity and bridge paths are morphisms of `Trace`,
+  the free category on a graph of steps (a CM in the slice over `X * X`).
+- Q3 (a) (O6): `Pool k` holds `k ≤ x * y` over `U256`; swap outputs are the
+  least solutions.
+- Q4 (a) (O8): liquidity keeps the price, not the product. The DAO is the
+  only liquidity provider. `removeLiq` reindexes `k`.
+- Q5 (a) (O9): virtual credit reserves, batches of deposits, an attestation
+  of each batch, claims on the other side; credit conservation.
+- Q6 (a) (O13): one Schnorr signature on BN254 under the DAO threshold key
+  (FROST off the chain). One key for ElGamal and Schnorr is a VALIDATION
+  assumption.
+- Q7 (a) (O10, O11): privacy is unlinkability (denominations, one-time
+  keys, bLSAG ring claims, key images). Amounts and pool arithmetic are
+  public. FHE is only in the DAO tally.
+- Q8 (a): the DAO runs on side A. Side B enacts an attested Decision.
+- Q9 (a) (O15): port the intent-lang slices when they exist.
+- Q10 (a): no fee and no minimum output.
+
 Builder calls (NOT ruled; section 10 gives each one, section 11 gives the
-questions):
+questions that the USER ruled in S1):
 
 - O1: the name bridge-lang.
 - O2: the kit is hosts/tcc-evm-contract (U256, Addr, Env, `pay`, `pull`,
@@ -34,8 +62,8 @@ questions):
 ## 2. The reading of R1
 
 R1 has the same text as in intent-lang. This plan proposes the reading that
-intent-lang ruled on 2026-10-22 (intent-lang Q1 (a), Q2 (a)). Here it is not
-ruled yet (Q1).
+intent-lang ruled on 2026-10-22 (intent-lang Q1 (a), Q2 (a)). RULED: Q1
+(a).
 
 ### 2.1 The ambient structure
 
@@ -327,7 +355,7 @@ The ring size bounds the gas of `claim` (O17).
 | Slice | Content | Status |
 |---|---|---|
 | S0 | Seed: the template with the tcc-evm-contract host, the design verbatim, this plan, the kit gate GREEN, the private remote | DONE |
-| S1 | USER rulings on the questions of section 11; record them in this plan | PLANNED |
+| S1 | USER rulings on the questions of section 11; record them in this plan | DONE |
 | S2 | Kernel port from orbit-lang 2162fb2 (section 6); the gate counts of orbit-lang | PLANNED |
 | S3 | R1 narrowing: `REFUSE_CELL`, the free monoid, the former matrix as CM and CC rows (port from intent-lang S3 when it exists) | PLANNED |
 | S4 | `Trace` as the free category CM in a slice; the category laws; the meaning functor; `Stream` of batches (CC) | PLANNED |
@@ -343,29 +371,32 @@ The ring size bounds the gas of `claim` (O17).
 
 - O1: the name bridge-lang. Builder call.
 - O2: the kit and the kernel route (section 6). Builder call.
-- O3: the reading of R1 (section 2), as intent-lang ruled it. Q1.
+- O3: the reading of R1 (section 2), as intent-lang ruled it. RULED: Q1
+  (a).
 - O4: `ZKBridge` has no type parameter, so R1 does not limit it (2.2).
   Builder call.
 - O5: a swap, a liquidity change and a bridge transfer are morphisms of the
-  free category `Trace`, not paths, because `Pool k` is a set (4.1). Q2.
+  free category `Trace`, not paths, because `Pool k` is a set (4.1).
+  RULED: Q2 (a).
 - O6: `Pool k` holds `k ≤ x * y` over `U256`; swap outputs are the least
-  solutions (4.2). Q3.
+  solutions (4.2). RULED: Q3 (a).
 - O7: reserves stay below `2^128`; a larger value reverts. The S5 slice
   checks the kit `U256` overflow behavior. Builder call.
 - O8: liquidity keeps the price, not the product; the DAO is the only
-  liquidity provider (4.3). Q4.
+  liquidity provider (4.3). RULED: Q4 (a).
 - O9: the bridge model: virtual credit reserves, batches, attestation,
-  claims (4.4). Q5.
+  claims (4.4). RULED: Q5 (a).
 - O10: privacy is the unlinkability of a deposit and its claim; amounts are
-  public (4.5). Q7.
-- O11: pool arithmetic is public; FHE is only in the DAO tally (4.5). Q7.
+  public (4.5). RULED: Q7 (a).
+- O11: pool arithmetic is public; FHE is only in the DAO tally (4.5).
+  RULED: Q7 (a).
 - O12: `fheHom` is a law of `decrypt`, not a constructor (3.4). Builder
   call.
-- O13: one BN254 key for ElGamal and Schnorr (4.6). Q6.
+- O13: one BN254 key for ElGamal and Schnorr (4.6). RULED: Q6 (a).
 - O14: the attested message names the side and the batch number. A second
   bridge with the same committee needs the chain id or the contract address
   in the message; the kit `Env` has neither. Builder call; S10 decides.
-- O15: reuse of the intent-lang slices (section 6). Q9.
+- O15: reuse of the intent-lang slices (section 6). RULED: Q9 (a).
 - O16: `Stream` of batches is the one CC instance of the plan. Builder
   call.
 - O17: the ring size of a claim bounds its gas. S10 measures it. Builder
@@ -373,35 +404,42 @@ The ring size bounds the gas of `claim` (O17).
 - O18: the dash check of `test/gate.sh` skips `design/DESIGN.md`, because
   the design is verbatim and holds two em-dashes (tile-lang ruling
   2026-10-09). Builder call.
+- O19: the kanon run dirs .kanon-exec/ and .kanon-wait/ are ignored, so
+  `git add -A` cannot stage them. Builder call.
 
 ## 11. Questions for the USER (S1)
 
+All ten are RULED (S1, 2026-10-22; the quote is in section 1).
+
 - Q1 (O3): reading of R1. (a) as intent-lang ruled: ambient Pi, Sigma,
   Path, U unlimited; declared constructors only CM and CC; the syntactic
-  cell criterion. RECOMMENDED. (b) another reading.
+  cell criterion. RECOMMENDED. (b) another reading. RULED: (a).
 - Q2 (O5): the design's paths in `Pool k`. (a) morphisms of the free
   category `Trace` (a CM). RECOMMENDED. (b) a non-discrete carrier (real
   numbers as a HIT); it is still a set, so this does not help. (c) maps out
   of the interval into a topological carrier; not computable on the EVM.
+  RULED: (a).
 - Q3 (O6): the invariant. (a) `k ≤ x * y` with least-solution outputs.
   RECOMMENDED. (b) exact rationals off the chain, integer settlement on the
-  chain.
+  chain. RULED: (a).
 - Q4 (O8): liquidity. (a) keeps the price; the DAO is the only liquidity
   provider. RECOMMENDED. (b) liquidity shares for any user (one more token
-  type).
+  type). RULED: (a).
 - Q5 (O9): the bridge model. (a) virtual credit reserves, batches,
   attestation and claims (4.4). RECOMMENDED. (b) a two-asset pool on each
-  side and a price oracle.
+  side and a price oracle. RULED: (a).
 - Q6 (O13): the attestation. (a) one Schnorr signature on BN254 under the
   DAO threshold key (FROST off the chain). RECOMMENDED. (b) `t` of `n`
-  `ecrecover` signatures of the members.
+  `ecrecover` signatures of the members. RULED: (a).
 - Q7 (O10, O11): privacy. (a) unlinkability by denominations, one-time
   keys and bLSAG ring claims; amounts public; FHE in the DAO tally.
   RECOMMENDED. (b) no bridge privacy; ZK, FHE and MPC only in the DAO.
   (c) shielded notes with a SNARK verifier (`ecPairing`, 0x08); not minimal.
+  RULED: (a).
 - Q8: the DAO home. (a) the DAO runs on side A; side B enacts an attested
-  Decision. RECOMMENDED. (b) one DAO on each side.
+  Decision. RECOMMENDED. (b) one DAO on each side. RULED: (a).
 - Q9 (O15): (a) port the intent-lang slices when they exist. RECOMMENDED.
-  (b) build them again here.
+  (b) build them again here. RULED: (a).
 - Q10: fee and minimum output. (a) none, because the design gives none.
   RECOMMENDED. (b) a minimum output on `claim`; it needs a refund path.
+  RULED: (a).
