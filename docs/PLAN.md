@@ -366,7 +366,7 @@ The ring size bounds the gas of `claim` (O17).
 | S1 | USER rulings on the questions of section 11; record them in this plan | DONE |
 | S2 | Kernel port from orbit-lang 2162fb2 (section 6); the gate counts of orbit-lang | DONE (2026-10-22): examples 41, parse refusals 19, check refusals 171, kit-only refusals 22, evals 159, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S3 | R1 narrowing: `REFUSE_CELL`, the free monoid, the former matrix as CM and CC rows (port of intent-lang 32c1d13) | DONE (2026-10-23): examples 44, parse refusals 19, check refusals 172, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 199, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
-| S4 | `Trace` as the free category CM in a slice; the category laws; the meaning functor; `Stream` of batches (CC) | PLANNED |
+| S4 | `Trace` as the free category CM in a slice; the category laws; the meaning functor; `Stream` of batches (CC) | s1 DONE (2026-10-23), Part 1, the port of intent-lang 4b36026 (the cocell comonads and `cofamily Stream`): examples 48, parse refusals 19, check refusals 177, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 242, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures (O44 to O47); Part 2 (`Trace`, the category laws, the meaning functor, `Stream` of batches) is s2 (Q-S4-1 (a)) |
 | S5 | Part P: `Pos`, `Pool k`, `swapIn`, `swapOut`, the least-solution law, `addLiq`, `removeLiq`, the overflow bound | DONE (2026-10-22): examples 42, parse refusals 19, check refusals 171, pool refusals 4, kit-only refusals 22, evals 180, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S6 | Part B: credit, `InFlight`, `deposit`, `seal`, `accept`, `claim` on the guest side; conservation; `ua e` transport | DONE (2026-10-22): examples 43, parse refusals 19, check refusals 171, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 199, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | s1 DONE (2026-10-23), the guest side (Q-S7-1 (a)): examples 46, parse refusals 19, check refusals 174, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 217, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the host and precompile rows wait for intent-lang S5 and S6 (O33) |
@@ -596,6 +596,37 @@ The ring size bounds the gas of `claim` (O17).
   payouts, retention of the first image, and the two-image list after
   a different depositor claims. The replay refusals use the actual
   returned state rather than a manually assembled spent list.
+- O44: the S4 port base is intent-lang 4b36026 on 32c1d13: `git diff
+  32c1d13 4b36026` without `docs/PLAN.md` and `docs/STATUS.md`, then
+  `sd intent-lang bridge-lang`. The bridge-lang base is the USER commit
+  617d39b on 8e859a9 (the S8 tree with the USER review fix, O43). 13
+  paths apply with line offsets only. The local differences of
+  `SPEC.md`, `docs/VALIDATION.md`, `src/front/check.c` and
+  `test/fronttool.c` are not in the hunks. The 3 lists
+  `test/check/expect.txt`, `test/check/kit.txt` and
+  `test/eval/expect.txt` do not apply, because S5 to S8 added rows at
+  their ends. Their new rows (2, 1 and 5) are after the bridge-lang
+  rows. intent-lang has a newer USER commit, 1b65dec (its S5: the
+  sealed `Enc` monad, a law-only `decrypt`, host ElGamal). S4 does not
+  port it (Q-S4-2).
+- O45: the keyword check. The lexer hunk adds one keyword, `cofamily`.
+  The domain hunk adds `Stream`, `sCorec`, `sHead`, `sTail`, `sExtend`
+  and `sDuplicate`, and the checker makes `Stream.pos`, `Stream.walk`
+  and `StreamBisim`. No bridge-lang-only file in `examples`, `test`,
+  `domain` or `kernel` uses one of these names (`rg -nw`). So no file
+  is migrated.
+- O46: an "O28" or a "choice (ii)" citation in a ported file
+  (`SPEC.md`, `docs/VALIDATION.md`, `domain/domain.lang`,
+  `examples/cocell.lang`, `formers/FORMERS.md`) names the intent-lang
+  O28 and its elaboration choice, as in O30. The bridge-lang O28 is a
+  different item.
+- O47: builder calls. The wf-builder (fable xhigh) stopped on the API
+  classifier (`reasoning_extraction`, request
+  req_011CgKe94yKUvGDYAgRVQSyh) before it wrote a file. The opus xhigh
+  fallback stopped on the same classifier (request
+  req_011CgKeADaGfqrXNeZLD3grW). Part 1 is a build by hand (USER
+  ruling 10-05, as in O42). The session context limit came before Part
+  2, so Part 2 is S4 s2 (Q-S4-1 (a)).
 
 ## 11. Questions for the USER (S1)
 
@@ -751,12 +782,12 @@ carries the carrier question.
 Q-S7-1 (a) and Q-S7-2 (a) are taken. Q-S2-1, Q-S3-1, Q-S3-2, Q-S5-1,
 Q-S5-2, Q-S6-1, Q-S6-2 and Q-S6-3 stay OPEN.
 
-### S8 questions (OPEN)
+### S8 questions (RULED)
 
 - Q-S8-1 (the form of `ZKBridge`). (a) a guest `Cyl` in `examples`, no
   src change and no domain change. RECOMMENDED, taken (O38). (b)
   `family Cyl` in `domain/domain.lang`. (c) a kernel splice
-  `kernel/zkbridge.lang`.
+  `kernel/zkbridge.lang`. RULED: (a) (USER, 2026-10-23).
 - Q-S8-2 (the claim domain; Q-S2-1 stays OPEN). (a) keep the tag
   "orbit", put the word "claim" in the poll slot, and record key-image
   unlinkability as a VALIDATION assumption (one-time keys, O13), with
@@ -764,17 +795,36 @@ Q-S5-2, Q-S6-1, Q-S6-2 and Q-S6-3 stay OPEN.
   (O39). (b) src: the tag as a parameter and H_p(tag, P); all the zk,
   precompile, prove and contract vectors again. (c) Q-S2-1 (b) as
   written: the global tag "bridge"; src, the vectors again, and no
-  key-image separation.
+  key-image separation. RULED: (a) (USER, 2026-10-23).
 - Q-S8-3 (`mpcCube`). (a) no guest constructor; `ZKBridge` is a set;
   the content is the S7 attest law. RECOMMENDED, taken (O40). (b) a
-  refl square on `zkProof` at closed values. (c) defer to S10.
+  refl square on `zkProof` at closed values. (c) defer to S10. RULED:
+  (a) (USER, 2026-10-23).
 - Q-S8-4 (the place of the ring claim). (a) extend
   `examples/bridge.lang` beside `claim` and keep `Mem`. RECOMMENDED,
   taken (O41). (b) replace `Mem` in `claim` (this changes
   `examples/bridge.lang` line 141, `pClaim` and
   `test/bridge/bridge-claim-absent.lang`). (c) a new kit example with a
-  copy of `examples/bridge.lang` (the Q-S6-1 pattern).
+  copy of `examples/bridge.lang` (the Q-S6-1 pattern). RULED: (a)
+  (USER, 2026-10-23).
 
-Q-S8-1 (a), Q-S8-2 (a), Q-S8-3 (a) and Q-S8-4 (a) are taken. Q-S2-1,
-Q-S3-1, Q-S3-2, Q-S5-1, Q-S5-2, Q-S6-1, Q-S6-2, Q-S6-3 and Q-S7-2 stay
-OPEN.
+The USER RULED Q-S8-1 (a), Q-S8-2 (a), Q-S8-3 (a) and Q-S8-4 (a)
+(2026-10-23). Q-S2-1, Q-S3-1, Q-S3-2, Q-S5-1, Q-S5-2, Q-S6-1, Q-S6-2,
+Q-S6-3 and Q-S7-2 stay OPEN.
+
+### S4 questions (OPEN)
+
+- Q-S4-1 (the order of Part 2). (a) S4 s2 next: `Trace`, its category
+  laws, the meaning functor and `Stream` of batches on the ported
+  `cofamily Stream`, before S9. RECOMMENDED, taken (O47). (b) S9 first,
+  then S4 s2.
+- Q-S4-2 (the port of intent-lang 1b65dec, its S5, O44). S9 uses `Enc`
+  for the encrypted ballots. (a) port 1b65dec after S4 s2 and before
+  S9, so that S9 uses the sealed `Enc` and does not migrate later; the
+  port is a src change and answers Q-S7-2 in the intent-lang form.
+  RECOMMENDED. (b) S9 first on the S7 alias `Enc A := Prod Unit A`
+  (Q-S7-2 (a)), then the port and a migration of S9. No step of S4 s1
+  takes an option.
+
+Q-S4-1 (a) is taken. Q-S4-2 is OPEN for the USER. Q-S2-1, Q-S3-1,
+Q-S3-2, Q-S5-1, Q-S5-2, Q-S6-1, Q-S6-2, Q-S6-3 and Q-S7-2 stay OPEN.

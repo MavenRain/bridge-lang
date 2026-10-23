@@ -65,7 +65,8 @@ typedef struct {
 typedef enum {
   DECL_DEF,    /* def [rec] name : type := body */
   DECL_AXIOM,  /* axiom name : type */
-  DECL_FAMILY  /* family name params [: index] := ctor | ... [and ...] */
+  DECL_FAMILY, /* family name params [: index] := ctor | ... [and ...] */
+  DECL_COFAMILY /* cofamily name params := corec field* (S4): elaborated */
 } DeclKind;
 
 /* A family is legal only in the domain file (rule R1). ORIGIN_KIT is the

@@ -45,6 +45,18 @@ family Trunc0 (A : Type 0) := trunc0 (trunc0Of : A) | squash0 (squash0From : Tru
 -- The size index (S6, O24, USER ruling S6): a domain family, so Nat
 -- stays internal.
 family Size := sz0 | szS (szPred : Size)
+-- The stream comonad (S4, O28): the cofree comonad of the cocell
+-- signature with the observation sHead and the cofield sTail. The checker
+-- elaborates it (choice (ii)) to the positions Stream.pos, Stream A :=
+-- Stream.pos -> A, the destructors sHead and sTail, the walk Stream.walk,
+-- the corecursor sCorec and the bisimulation principle StreamBisim.
+cofamily Stream (A : Type 0) := sCorec (sHead : A) (sTail : Stream A)
+-- Extend and duplicate: sExtend A B f is the corecursor at the seed type
+-- Stream A, with the observation f and the step sTail A.
+def sExtend : (A : Type 0) -> (B : Type 0) -> (Stream A -> B) -> Stream A -> Stream B :=
+  fun (A : Type 0) => fun (B : Type 0) => fun (f : Stream A -> B) => sCorec B (Stream A) f (sTail A)
+def sDuplicate : (A : Type 0) -> Stream A -> Stream (Stream A) :=
+  fun (A : Type 0) => sExtend A (Stream A) (fun (x : Stream A) => x)
 -- The parity quotient of Size (S3, design C 2b, USER ruling Q-S3-8 (a)):
 -- sizeEven s is sz0 for an even s and szS sz0 for an odd s, and parityEq
 -- is a path from parityOf a to parityOf b when a and b have the same

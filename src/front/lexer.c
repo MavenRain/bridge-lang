@@ -12,6 +12,7 @@ typedef struct {
   size_t count;
   Diag *diag;
   const char *source;
+  int internal; /* lex_internal: `.` is a name character (S4) */
 } Lexer;
 
 static const struct {
@@ -28,6 +29,7 @@ static const struct {
   {"state", TOK_KW_STATE},
   {"event", TOK_KW_EVENT},
   {"and", TOK_KW_AND},
+  {"cofamily", TOK_KW_COFAMILY},
 };
 
 const char *tok_kind_name(TokKind kind) {
@@ -61,6 +63,7 @@ const char *tok_kind_name(TokKind kind) {
     case TOK_KW_STATE: return "'state'";
     case TOK_KW_EVENT: return "'event'";
     case TOK_KW_AND: return "'and'";
+    case TOK_KW_COFAMILY: return "'cofamily'";
   }
   return "a token";
 }
@@ -129,7 +132,7 @@ static int lex_ident(Lexer *lx) {
   size_t start = lx->pos;
   int line = lx->line;
   int col = lx->col;
-  while (is_ident_char(peek(lx, 0))) advance(lx, 1);
+  while (is_ident_char(peek(lx, 0)) || (lx->internal && peek(lx, 0) == '.')) advance(lx, 1);
   push(lx, keyword_kind(lx->text + start, lx->pos - start), start, line, col);
   return 1;
 }
@@ -257,23 +260,31 @@ static int lex_symbol(Lexer *lx) {
   return 1;
 }
 
-int lex_source(Arena *arena, const char *source, const char *text, size_t len, TokenList *out, Diag *diag) {
+static int lex_text(Arena *arena, const char *source, const char *text, size_t len, int internal, TokenList *out, Diag *diag) {
   /* Each token takes at least one byte, and one EOF token follows. */
   Token *tokens = arena_alloc(arena, (len + 1) * sizeof(Token));
   if (tokens == NULL) return diag_fail(diag, "OOM", NULL, "%s: no memory for the tokens", source);
   Lexer lx = {
     .text = text, .len = len, .pos = 0, .line = 1, .col = 1,
-    .out = tokens, .count = 0, .diag = diag, .source = source,
+    .out = tokens, .count = 0, .diag = diag, .source = source, .internal = internal,
   };
   for (;;) {
     skip_trivia(&lx);
     if (lx.pos >= lx.len) break;
     char c = peek(&lx, 0);
-    int ok = is_ident_start(c) ? lex_ident(&lx) : is_digit(c) ? lex_nat(&lx) : lex_symbol(&lx);
+    int ok = is_ident_start(c) || (lx.internal && c == '.') ? lex_ident(&lx) : is_digit(c) ? lex_nat(&lx) : lex_symbol(&lx);
     if (!ok) return 0;
   }
   push(&lx, TOK_EOF, lx.pos, lx.line, lx.col);
   out->items = tokens;
   out->count = lx.count;
   return 1;
+}
+
+int lex_source(Arena *arena, const char *source, const char *text, size_t len, TokenList *out, Diag *diag) {
+  return lex_text(arena, source, text, len, 0, out, diag);
+}
+
+int lex_internal(Arena *arena, const char *source, const char *text, size_t len, TokenList *out, Diag *diag) {
+  return lex_text(arena, source, text, len, 1, out, diag);
 }

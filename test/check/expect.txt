@@ -173,3 +173,5 @@ guest-list.lang REFUSE_CELL
 enc-guest-family.lang REFUSE_DATA
 attest-wrong.lang PATH_END
 zk-cyl-refl.lang PATH_END
+cofamily-guest.lang REFUSE_DATA
+cofamily-state.lang REFUSE_STATE

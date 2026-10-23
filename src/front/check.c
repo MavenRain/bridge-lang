@@ -5,7 +5,11 @@
    are equal (front/eval.c). The checker writes core terms (front/core.h). */
 #include "front/check.h"
 #include "front/blsag.h"
+#include "front/lexer.h"
+#include "front/parser.h"
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 
 #define CHECK_DEPTH_LIMIT 2000u
@@ -4005,12 +4009,10 @@ static int kernel_sig(Checker *c, const Decl *d) {
   return 1;
 }
 
-static int check_def(Checker *c, const Decl *d) {
+/* Register a checked body, including the closed label cores retained by
+   cocell_shape. Both callers obtain BODY from the term checker. */
+static int check_def_body(Checker *c, const Decl *d, const Value *tv, const Core *body) {
   Machine *m = c->m;
-  uint64_t level = 0;
-  const Core *t = check_type(c, d->type, &level);
-  const Value *tv = here(c, t);
-  const Core *body = check(c, d->body, tv);
   DefInfo *info = &m->defs[m->def_count];
   if (body == NULL || !check_sig(c, d, tv))
     return 0;
@@ -4023,6 +4025,14 @@ static int check_def(Checker *c, const Decl *d) {
   info->value = NULL;
   m->def_count++;
   return 1;
+}
+
+static int check_def(Checker *c, const Decl *d) {
+  uint64_t level = 0;
+  const Core *t = check_type(c, d->type, &level);
+  const Value *tv = here(c, t);
+  const Core *body = check(c, d->body, tv);
+  return check_def_body(c, d, tv, body);
 }
 
 /* First order (slice K3a): Nat, Flag, U256, Addr, and Option, Prod and List
@@ -4085,6 +4095,377 @@ static int check_state(Checker *c, const Decl *d) {
   return 1;
 }
 
+/* The fields of a cocell signature (S4, rule R1): the one observation `A`,
+   a cofield `D A`, or a labelled cofield `E -> D A` with E closed. */
+typedef enum {
+  COCELL_OBSERVATION,
+  COCELL_COFIELD,
+  COCELL_LABELLED
+} CocellField;
+
+/* T is the application of the variable of index F to the variable of
+   index A. */
+static int cocell_app(const Core *t, uint32_t f, uint32_t a) {
+  return t->kind == CORE_APP && t->a->kind == CORE_VAR && t->a->index == f && t->b->kind == CORE_VAR && t->b->index == a;
+}
+
+/* The kind of FIELD J with the normal type T, in the context D, A, then the
+   J earlier fields: A is the variable J and D is the variable J + 1. A
+   labelled cofield is an arrow written in the field. */
+static int cocell_kind(const Field *field, const Core *t, uint32_t j, CocellField *out) {
+  if (t->kind == CORE_VAR && t->index == j) {
+    *out = COCELL_OBSERVATION;
+    return 1;
+  }
+  if (cocell_app(t, j + 1u, j)) {
+    *out = COCELL_COFIELD;
+    return 1;
+  }
+  if (field->type->kind == TERM_PI && t->kind == CORE_PI && cell_closed(t->a, 0u) && cocell_app(t->b, j + 2u, j + 1u)) {
+    *out = COCELL_LABELLED;
+    return 1;
+  }
+  return 0;
+}
+
+/* The shape check of `cofamily D (A : Type n) := c fields` (S4, rule R1):
+   one declaration, one type parameter, no index, one clause, and each
+   field a kind of CocellField, with exactly one observation. The fields
+   are checked with D : Type n -> Type n and A as locals. The universe of
+   the parameter goes to *N, the field kinds to KINDS and the universe of
+   each label type to LABELS, with its closed normal form in LABEL_TYPES. */
+static int cocell_shape(Checker *c, const Decl *d, uint64_t *n, CocellField *kinds, uint64_t *labels, const Core **label_types) {
+  Machine *m = c->m;
+  const Ctor *ctor = d->ctors;
+  Term *arrow = arena_alloc(m->arena, sizeof *arrow);
+  const Core *pt, *pn, *dt;
+  uint64_t level = 0;
+  uint32_t j, observations = 0;
+  if (arrow == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  if (d->block_count > 1u)
+    return FAIL(c, "REFUSE_CELL", "%s is not a cocell signature: it is in an and block; a type constructor is one signature (rule R1)", d->name);
+  if (d->param_count != 1u)
+    return FAIL(c, "REFUSE_CELL", "%s is not a cocell signature: it has %u parameters; a cocell signature has one type parameter (rule R1)", d->name, (unsigned)d->param_count);
+  if (d->index != NULL)
+    return FAIL(c, "REFUSE_CELL", "%s is not a cocell signature: it has a type index (rule R1)", d->name);
+  if (d->ctor_count != 1u || ctor->result != NULL || ctor->boundary != NULL)
+    return FAIL(c, "REFUSE_CELL", "%s is not a cocell signature: it must have one clause, with no result and no boundary (rule R1)", d->name);
+  pt = check_type(c, d->params[0].type, &level);
+  if (pt == NULL)
+    return 0;
+  pn = quote_value(m, c->level, here(c, pt));
+  if (pn == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  if (pn->kind != CORE_UNIV)
+    return FAIL(c, "REFUSE_CELL", "%s is not a cocell signature: the parameter %s is not a universe; a cocell signature has one type parameter (rule R1)", d->name, d->params[0].name);
+  *n = pn->nat;
+  memset(arrow, 0, sizeof *arrow);
+  arrow->kind = TERM_PI;
+  arrow->line = d->line;
+  arrow->col = d->col;
+  arrow->left = d->params[0].type;
+  arrow->right = d->params[0].type;
+  dt = check_type(c, arrow, &level);
+  if (dt == NULL || !push(c, d->name, here(c, dt)) || !push(c, d->params[0].name, here(c, pt)))
+    return 0;
+  for (j = 0; j < ctor->field_count; j++) {
+    const Field *field = &ctor->fields[j];
+    const Core *k = check_type(c, field->type, &level);
+    const Core *t = k == NULL ? NULL : quote_value(m, c->level, here(c, k));
+    if (k == NULL)
+      return 0;
+    if (t == NULL)
+      return FAIL(c, "OOM", "out of memory");
+    if (!cocell_kind(field, t, j, &kinds[j]))
+      return FAIL(c, "REFUSE_CELL", "%s is not a cocell signature: the field %s must be the observation %s, the cofield %s %s or a labelled cofield E -> %s %s with E closed (rule R1)",
+                  d->name, field->name, d->params[0].name, d->name, d->params[0].name, d->name, d->params[0].name);
+    labels[j] = 0;
+    if (kinds[j] == COCELL_LABELLED && check_type(c, field->type->left, &labels[j]) == NULL)
+      return 0;
+    if (labels[j] > *n)
+      return FAIL(c, "REFUSE_CELL", "%s is not a cocell signature: the label type of %s is in Type %llu, above Type %llu of %s (rule R1)",
+                  d->name, field->name, (unsigned long long)labels[j], (unsigned long long)*n, d->params[0].name);
+    /* cocell_kind proved this domain closed. Keep its checked normal form
+       rather than resolving the original syntax in a different scope. */
+    label_types[j] = kinds[j] == COCELL_LABELLED ? t->a : NULL;
+    observations += kinds[j] == COCELL_OBSERVATION;
+    if (!push(c, field->name, here(c, k)))
+      return 0;
+  }
+  if (observations != 1u)
+    return FAIL(c, "REFUSE_CELL", "%s is not a cocell signature: it has %u observations; a cocell signature has exactly one (rule R1)", d->name, (unsigned)observations);
+  for (j = 0; j < ctor->field_count; j++)
+    if (!name_free(c, ctor->fields[j].name))
+      return 0;
+  return name_free(c, ctor->name);
+}
+
+/* The text of the declarations of a cofamily (S4): a two-pass appender.
+   With TEXT NULL it only measures; then it writes into CAP bytes. */
+typedef struct {
+  char *text;
+  size_t len;
+  size_t cap;
+} Text;
+
+static void text_add(Text *t, const char *format, ...) {
+  va_list ap;
+  int n;
+  va_start(ap, format);
+  n = vsnprintf(t->text == NULL ? NULL : t->text + t->len, t->text == NULL ? 0u : t->cap - t->len, format, ap);
+  va_end(ap);
+  t->len += n > 0 ? (size_t)n : 0u;
+}
+
+/* The position constructor of field F of the cofamily DN. */
+static void cocell_pos(Text *t, const char *dn, const char *f, CocellField kind) {
+  switch (kind) {
+  case COCELL_OBSERVATION:
+    break;
+  case COCELL_COFIELD:
+    text_add(t, " | %s.%s (%s.%s.rest : %s.pos)", dn, f, dn, f, dn);
+    break;
+  case COCELL_LABELLED:
+    text_add(t, " | %s.%s (%s.%s.label : %s.%s.E) (%s.%s.rest : %s.pos)", dn, f, dn, f, dn, f, dn, f, dn);
+    break;
+  }
+}
+
+/* The destructor F: the observation reads the position here, a cofield
+   moves one position down. */
+static void cocell_dtor(Text *t, const char *dn, const char *f, CocellField kind, unsigned long long u) {
+  switch (kind) {
+  case COCELL_OBSERVATION:
+    text_add(t, "def %s : (.A : Type %llu) -> %s .A -> .A := fun (.A : Type %llu) (.x : %s .A) => .x %s.here\n", f, u, dn, u, dn, dn);
+    break;
+  case COCELL_COFIELD:
+    text_add(t, "def %s : (.A : Type %llu) -> %s .A -> %s .A := fun (.A : Type %llu) (.x : %s .A) (.p : %s.pos) => .x (%s.%s .p)\n",
+             f, u, dn, dn, u, dn, dn, dn, f);
+    break;
+  case COCELL_LABELLED:
+    text_add(t, "def %s : (.A : Type %llu) -> %s .A -> %s.%s.E -> %s .A := fun (.A : Type %llu) (.x : %s .A) (.e : %s.%s.E) (.p : %s.pos) => .x (%s.%s .e .p)\n",
+             f, u, dn, dn, f, dn, u, dn, dn, f, dn, dn, f);
+    break;
+  }
+}
+
+/* The step binder of cofield F for the walk and the corecursor, then
+   SUFFIX. */
+static void cocell_step(Text *t, const char *dn, const char *f, CocellField kind, const char *suffix) {
+  switch (kind) {
+  case COCELL_OBSERVATION:
+    break;
+  case COCELL_COFIELD:
+    text_add(t, " (.t.%s : .S -> .S)%s", f, suffix);
+    break;
+  case COCELL_LABELLED:
+    text_add(t, " (.t.%s : .S -> %s.%s.E -> .S)%s", f, dn, f, suffix);
+    break;
+  }
+}
+
+/* The fold case of cofield F in the walk at the motive S -> S: the step
+   first, then the rest of the walk. */
+static void cocell_walk_case(Text *t, const char *dn, const char *f, CocellField kind) {
+  switch (kind) {
+  case COCELL_OBSERVATION:
+    break;
+  case COCELL_COFIELD:
+    text_add(t, "\n    (fun (.ih : .S -> .S) (.s : .S) => .ih (.t.%s .s))", f);
+    break;
+  case COCELL_LABELLED:
+    text_add(t, "\n    (fun (.e : %s.%s.E) (.ih : .S -> .S) (.s : .S) => .ih (.t.%s .s .e))", dn, f, f);
+    break;
+  }
+}
+
+static void cocell_walk_arg(Text *t, const char *f, CocellField kind) {
+  switch (kind) {
+  case COCELL_OBSERVATION:
+    break;
+  case COCELL_COFIELD:
+  case COCELL_LABELLED:
+    text_add(t, " .t.%s", f);
+    break;
+  }
+}
+
+/* The bisimulation motive at the position .q. */
+static void cocell_motive(Text *t, const char *dn) {
+  text_add(t, "(.u : %s .A) -> (.v : %s .A) -> .R .u .v -> Path .A (.u .q) (.v .q)", dn, dn);
+}
+
+/* The bisimulation hypothesis of field F, then SUFFIX. */
+static void cocell_hyp(Text *t, const char *dn, const char *f, CocellField kind, const char *suffix) {
+  text_add(t, "\n    (.h.%s : (.u : %s .A) -> (.v : %s .A) -> .R .u .v -> ", f, dn, dn);
+  switch (kind) {
+  case COCELL_OBSERVATION:
+    text_add(t, "Path .A (%s .A .u) (%s .A .v))%s", f, f, suffix);
+    break;
+  case COCELL_COFIELD:
+    text_add(t, ".R (%s .A .u) (%s .A .v))%s", f, f, suffix);
+    break;
+  case COCELL_LABELLED:
+    text_add(t, "(.e : %s.%s.E) -> .R (%s .A .u .e) (%s .A .v .e))%s", dn, f, f, f, suffix);
+    break;
+  }
+}
+
+/* The elim case of cofield F in the bisimulation: the label, the rest,
+   its induction hypothesis, then the two streams and the relation. */
+static void cocell_bisim_case(Text *t, const char *dn, const char *f, CocellField kind) {
+  switch (kind) {
+  case COCELL_OBSERVATION:
+    break;
+  case COCELL_COFIELD:
+    text_add(t, "\n    (fun (.q : %s.pos) (.ih : ", dn);
+    cocell_motive(t, dn);
+    text_add(t, ") (.u : %s .A) (.v : %s .A) (.w : .R .u .v) => .ih (%s .A .u) (%s .A .v) (.h.%s .u .v .w))", dn, dn, f, f, f);
+    break;
+  case COCELL_LABELLED:
+    text_add(t, "\n    (fun (.e : %s.%s.E) (.q : %s.pos) (.ih : ", dn, f, dn);
+    cocell_motive(t, dn);
+    text_add(t, ") (.u : %s .A) (.v : %s .A) (.w : .R .u .v) => .ih (%s .A .u .e) (%s .A .v .e) (.h.%s .u .v .w .e))", dn, dn, f, f, f);
+    break;
+  }
+}
+
+/* The elaboration of `cofamily D (A : Type n) := c fields` (S4, choice
+   (ii)): the positions D.pos, `D A := D.pos -> A`, one destructor per
+   field, the walk, the corecursor c and the bisimulation principle
+   DBisim. Generated binders start with `.`, so they never capture a user
+   name. */
+static void cocell_text(Text *t, const Decl *d, uint64_t n, const CocellField *kinds) {
+  const Ctor *ctor = d->ctors;
+  const char *dn = d->name;
+  const char *obs = "";
+  unsigned long long u = (unsigned long long)n;
+  size_t j;
+  for (j = 0; j < ctor->field_count; j++)
+    obs = kinds[j] == COCELL_OBSERVATION ? ctor->fields[j].name : obs;
+  text_add(t, "family %s.pos := %s.here", dn, dn);
+  for (j = 0; j < ctor->field_count; j++)
+    cocell_pos(t, dn, ctor->fields[j].name, kinds[j]);
+  text_add(t, "\ndef %s : Type %llu -> Type %llu := fun (.A : Type %llu) => %s.pos -> .A\n", dn, u, u, u, dn);
+  for (j = 0; j < ctor->field_count; j++)
+    cocell_dtor(t, dn, ctor->fields[j].name, kinds[j], u);
+  text_add(t, "def %s.walk : (.S : Type %llu) ->", dn, u);
+  for (j = 0; j < ctor->field_count; j++)
+    cocell_step(t, dn, ctor->fields[j].name, kinds[j], " ->");
+  text_add(t, " %s.pos -> .S -> .S :=\n  fun (.S : Type %llu)", dn, u);
+  for (j = 0; j < ctor->field_count; j++)
+    cocell_step(t, dn, ctor->fields[j].name, kinds[j], "");
+  text_add(t, " (.p : %s.pos) => fold (fun (.s : .S) => .s)", dn);
+  for (j = 0; j < ctor->field_count; j++)
+    cocell_walk_case(t, dn, ctor->fields[j].name, kinds[j]);
+  text_add(t, " .p\ndef %s : (.A : Type %llu) -> (.S : Type %llu) -> (.o : .S -> .A) ->", ctor->name, u, u);
+  for (j = 0; j < ctor->field_count; j++)
+    cocell_step(t, dn, ctor->fields[j].name, kinds[j], " ->");
+  text_add(t, " .S -> %s .A :=\n  fun (.A : Type %llu) (.S : Type %llu) (.o : .S -> .A)", dn, u, u);
+  for (j = 0; j < ctor->field_count; j++)
+    cocell_step(t, dn, ctor->fields[j].name, kinds[j], "");
+  text_add(t, " (.seed : .S) (.p : %s.pos) => .o (%s.walk .S", dn, dn);
+  for (j = 0; j < ctor->field_count; j++)
+    cocell_walk_arg(t, ctor->fields[j].name, kinds[j]);
+  text_add(t, " .p .seed)\ndef %sBisim : (.A : Type %llu) -> (.R : %s .A -> %s .A -> Type %llu) ->", dn, u, dn, dn, u);
+  for (j = 0; j < ctor->field_count; j++)
+    cocell_hyp(t, dn, ctor->fields[j].name, kinds[j], " ->");
+  text_add(t, "\n    (.x : %s .A) -> (.y : %s .A) -> .R .x .y -> Path (%s .A) .x .y :=\n  fun (.A : Type %llu) (.R : %s .A -> %s .A -> Type %llu)", dn, dn, dn, u, dn, dn, u);
+  for (j = 0; j < ctor->field_count; j++)
+    cocell_hyp(t, dn, ctor->fields[j].name, kinds[j], "");
+  text_add(t, "\n    (.x : %s .A) (.y : %s .A) (.r : .R .x .y) =>\n  funExt (fun (.p : %s.pos) => elim (fun (.q : %s.pos) => ", dn, dn, dn, dn);
+  cocell_motive(t, dn);
+  text_add(t, ") .h.%s", obs);
+  for (j = 0; j < ctor->field_count; j++)
+    cocell_bisim_case(t, dn, ctor->fields[j].name, kinds[j]);
+  text_add(t, " .p .x .y .r)\n");
+}
+
+/* A fresh context for the declaration NAME at INDEX of the list. */
+static void checker_reset(Checker *c, size_t index, const char *name) {
+  c->decl_index = index;
+  c->scope = NULL;
+  c->env = NULL;
+  c->level = 0;
+  c->depth = 0;
+  c->self = NO_FAMILY;
+  c->self_count = 0u;
+  c->fold_targets = NULL;
+  c->elim_motive = NULL;
+  c->m->def = name;
+}
+
+/* A declaration that a cofamily elaborates to: a fresh context, then rule
+   R4 on its name (check_def does not check it). */
+static int check_generated(Checker *c, const Decl *d) {
+  checker_reset(c, c->decl_index, d->name);
+  if (!name_free(c, d->name))
+    return 0;
+  return d->kind == DECL_FAMILY ? check_family(c, d) : check_def(c, d);
+}
+
+/* The label type E of the labelled cofield FIELD of D, at the universe K
+   of the shape check: `def D.FIELD.E : Type K := E`. BODY is its checked,
+   closed normal form, so erased local references cannot escape. */
+static int check_label(Checker *c, const Decl *d, const Field *field, uint64_t k, const Core *body) {
+  Arena *arena = c->m->arena;
+  size_t size = strlen(d->name) + strlen(field->name) + 4u;
+  char *name = arena_alloc(arena, size);
+  Decl *e = arena_alloc(arena, sizeof *e);
+  if (name == NULL || e == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  snprintf(name, size, "%s.%s.E", d->name, field->name);
+  memset(e, 0, sizeof *e);
+  e->kind = DECL_DEF;
+  e->origin = ORIGIN_DOMAIN;
+  e->line = field->line;
+  e->col = field->col;
+  e->name = name;
+  e->block_count = 1u;
+  checker_reset(c, c->decl_index, name);
+  return name_free(c, name) && check_def_body(c, e, val_univ(c->m, k), body);
+}
+
+/* A cofamily (S4, rule R1): the shape check, then the label types, then
+   the generated text, lexed with `.` as a name character and checked
+   declaration by declaration. */
+static int check_cofamily(Checker *c, const Decl *d) {
+  Machine *m = c->m;
+  size_t count = d->ctor_count == 1u ? d->ctors[0].field_count : 0u;
+  size_t size = strlen(d->name) + 10u;
+  CocellField *kinds = arena_alloc(m->arena, (count + 1u) * sizeof *kinds);
+  uint64_t *labels = arena_alloc(m->arena, (count + 1u) * sizeof *labels);
+  const Core **label_types = arena_alloc(m->arena, (count + 1u) * sizeof *label_types);
+  char *source = arena_alloc(m->arena, size);
+  Text t = {NULL, 0, 0};
+  TokenList toks = {0};
+  DeclList list = {NULL, 0, 0};
+  uint64_t n = 0;
+  size_t i;
+  if (kinds == NULL || labels == NULL || label_types == NULL || source == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  if (!cocell_shape(c, d, &n, kinds, labels, label_types))
+    return 0;
+  snprintf(source, size, "cofamily %s", d->name);
+  cocell_text(&t, d, n, kinds);
+  t.cap = t.len + 1u;
+  t.len = 0;
+  t.text = arena_alloc(m->arena, t.cap);
+  if (t.text == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  cocell_text(&t, d, n, kinds);
+  for (i = 0; i < count; i++)
+    if (kinds[i] == COCELL_LABELLED && !check_label(c, d, &d->ctors[0].fields[i], labels[i], label_types[i]))
+      return 0;
+  if (!lex_internal(m->arena, source, t.text, t.len, &toks, m->diag) || !parse_source(m->arena, source, ORIGIN_DOMAIN, &toks, &list, m->diag))
+    return 0;
+  for (i = 0; i < list.count; i++)
+    if (!check_generated(c, &list.items[i]))
+      return 0;
+  return 1;
+}
+
 static int check_decl(Checker *c, const Decl *d) {
   if ((d->is_event || d->is_state) && guest(c))
     return kit_refused(c, d->is_state ? "the state form" : "an event");
@@ -4094,48 +4475,57 @@ static int check_decl(Checker *c, const Decl *d) {
     return check_state(c, d);
   if (d->kind == DECL_FAMILY && d->origin == ORIGIN_PROGRAM)
     return FAIL(c, "REFUSE_DATA", "a program cannot declare a family (rule R1); only domain/domain.lang can");
+  if (d->kind == DECL_COFAMILY && d->origin == ORIGIN_PROGRAM)
+    return FAIL(c, "REFUSE_DATA", "a program cannot declare a cofamily (rule R1); only domain/domain.lang can");
   if (d->kind == DECL_AXIOM)
     return FAIL(c, "REFUSE_AXIOM", "an axiom has no proof (rule R2)");
   if (d->is_rec)
     return FAIL(c, "REFUSE_REC", "def rec is refused (rule R3); use fold or unfold");
   if (!kernel_sig(c, d) || !name_free(c, d->name))
     return 0;
-  return d->kind == DECL_FAMILY ? check_family(c, d) : check_def(c, d);
+  switch (d->kind) {
+  case DECL_FAMILY:
+    return check_family(c, d);
+  case DECL_COFAMILY:
+    return check_cofamily(c, d);
+  case DECL_DEF:
+  case DECL_AXIOM:
+    break;
+  }
+  return check_def(c, d);
 }
 
 int check_program(Arena *arena, const DeclList *decls, Machine *m, Diag *diag, CheckMode mode) {
   Checker c;
   size_t ctors = 0;
+  size_t extra = 0;
   size_t i;
   memset(m, 0, sizeof *m);
   m->arena = arena;
   m->diag = diag;
   m->fuel = EVAL_FUEL_STEPS;
-  for (i = 0; i < decls->count; i++)
-    ctors += decls->items[i].ctor_count;
-  m->defs = arena_alloc(arena, (decls->count + 1u) * sizeof *m->defs);
-  m->families = arena_alloc(arena, (decls->count + 1u) * sizeof *m->families);
+  /* A cofamily with F fields elaborates to at most 2F + 4 definitions, one
+     family and F + 1 constructors (S4). */
+  for (i = 0; i < decls->count; i++) {
+    size_t fields = decls->items[i].kind == DECL_COFAMILY && decls->items[i].ctor_count == 1u ? decls->items[i].ctors[0].field_count : 0u;
+    int cofamily = decls->items[i].kind == DECL_COFAMILY;
+    ctors += decls->items[i].ctor_count + (cofamily ? fields + 1u : 0u);
+    extra += cofamily ? 2u * fields + 8u : 0u;
+  }
+  m->defs = arena_alloc(arena, (decls->count + extra + 1u) * sizeof *m->defs);
+  m->families = arena_alloc(arena, (decls->count + extra + 1u) * sizeof *m->families);
   m->ctors = arena_alloc(arena, (ctors + 1u) * sizeof *m->ctors);
   if (m->defs == NULL || m->families == NULL || m->ctors == NULL)
     return diag_fail(diag, "OOM", NULL, "out of memory");
-  m->def_cap = (uint32_t)decls->count;
-  m->family_cap = (uint32_t)decls->count;
+  m->def_cap = (uint32_t)(decls->count + extra);
+  m->family_cap = (uint32_t)(decls->count + extra);
   m->ctor_cap = (uint32_t)ctors;
   memset(&c, 0, sizeof c);
   c.m = m;
   c.decls = decls;
   c.mode = mode;
   for (i = 0; i < decls->count; i++) {
-    c.decl_index = i;
-    c.scope = NULL;
-    c.env = NULL;
-    c.level = 0;
-    c.depth = 0;
-    c.self = NO_FAMILY;
-    c.self_count = 0u;
-    c.fold_targets = NULL;
-    c.elim_motive = NULL;
-    m->def = decls->items[i].name;
+    checker_reset(&c, i, decls->items[i].name);
     if (!check_decl(&c, &decls->items[i]))
       return 0;
     /* The other sorts of a block are checked with its first sort (S6). */

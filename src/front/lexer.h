@@ -34,7 +34,8 @@ typedef enum {
   TOK_KW_SIGMA,
   TOK_KW_STATE,
   TOK_KW_EVENT,
-  TOK_KW_AND
+  TOK_KW_AND,
+  TOK_KW_COFAMILY
 } TokKind;
 
 typedef struct {
@@ -55,6 +56,9 @@ typedef struct {
 
 /* SOURCE names the input in diagnostics. Returns 1, or 0 after a diagnostic. */
 int lex_source(Arena *arena, const char *source, const char *text, size_t len, TokenList *out, Diag *diag);
+/* As lex_source, and `.` is also a name character (S4): the text of the
+   declarations that the checker generates for a cofamily. */
+int lex_internal(Arena *arena, const char *source, const char *text, size_t len, TokenList *out, Diag *diag);
 const char *tok_kind_name(TokKind kind);
 
 #endif

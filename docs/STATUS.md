@@ -405,3 +405,54 @@ Traps found in S8:
 The other counts do not change: parse refusals 19, pool refusals 4,
 kit-only refusals 22, proves 2, contracts 2 written 5 refused, rings 6
 built 2 refused, differential 28 guest evals, runs 5.
+
+## S4
+
+Slice S4 s1 (Part 1: the port of the intent-lang S4 cocell comonads,
+intent-lang 4b36026) is complete. Part 2 (`Trace`, its category laws,
+the meaning functor and `Stream` of batches) is S4 s2 (Q-S4-1 (a),
+O47). The change is not committed; its base is the USER commit 617d39b
+on 8e859a9 (the S8 tree with the USER review fix, O43). The gate `make
+clean` then `make check` is GREEN, exit 0.
+
+Changes (the port, O44):
+
+- `domain/domain.lang`: `cofamily Stream (A : Type 0) := sCorec (sHead
+  : A) (sTail : Stream A)`, with `sExtend` and `sDuplicate`.
+- `src/front/lexer.c`, `src/front/lexer.h`, `src/front/parser.c` and
+  `src/front/ast.h`: the keyword `cofamily`, `DECL_COFAMILY`, and
+  `lex_internal` (`.` is a name character in the text that the checker
+  makes).
+- `src/front/check.c`: `check_cofamily` elaborates a cofamily to the
+  positions `Stream.pos`, `Stream A := Stream.pos -> A`, the
+  destructors `sHead` and `sTail`, the walk `Stream.walk`, the
+  corecursor `sCorec` and the bisimulation principle `StreamBisim`. A
+  cofamily outside the domain file is `REFUSE_DATA`. A state field of a
+  stream type is `REFUSE_STATE`.
+- `examples/cocell.lang` (new, guest): the counit, extend and duplicate
+  laws (`lawCounit`, `lawExtendEps`, `lawAssoc` and the duplicate laws)
+  and 5 eval entries.
+- `test/check`: `cofamily-guest.lang` (`REFUSE_DATA`) and
+  `cofamily-state.lang` (`REFUSE_STATE`, also in `test/check/kit.txt`).
+- `test/eval/expect.txt`: 5 `cocell` rows, after the bridge-lang rows.
+- `test/fronttool.c`: the intent-lang S4 C regression cases (label
+  scope, universe levels, the dependent-label refusal).
+- `SPEC.md`, `docs/VALIDATION.md` and `formers/FORMERS.md`: the CC text;
+  the CC row is DONE.
+- No bridge-lang-only file changes (O45).
+
+Traps found in S4 s1:
+
+- The wf-builder and its opus fallback stopped on the API classifier
+  before they wrote a file. Part 1 is a build by hand (O47).
+- The ported texts cite the intent-lang O28 and "choice (ii)" (O46).
+
+| Count | S8 | S4 | Reason |
+|---|---|---|---|
+| examples | 47 | 48 | `cocell.lang` |
+| check refusals | 175 | 177 | `cofamily-guest.lang`, `cofamily-state.lang` |
+| evals | 237 | 242 | 5 `cocell` rows |
+
+The other counts do not change: parse refusals 19, pool refusals 4,
+bridge refusals 6, kit-only refusals 22, proves 2, contracts 2 written
+5 refused, rings 6 built 2 refused, differential 28 guest evals, runs 5.

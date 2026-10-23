@@ -47,6 +47,31 @@ Else the checker gives `REFUSE_CELL`.
 The cons list `List` (with `nil`, `cons` and `unfold`) is the kit host ABI:
 a guest program that names one gives `REFUSE_CELL` and uses `FreeMon` of
 `domain/domain.lang` in its place.
+The dual of a cell monad is the cofree comonad of a cocell signature (S4,
+O28). Only `domain/domain.lang` declares one: `cofamily D (A : Type n) :=
+c (o : A) (f : D A) (g : E -> D A)`. A `cofamily` in a program gives
+`REFUSE_DATA`. The shape: one type parameter, no index, no `and` block,
+one clause with no result and no boundary, exactly one observation field
+of the type `A`, and each other field a cofield `D A` or a labelled
+cofield `E -> D A` with `E` closed base data in a universe at most `n`.
+Else the checker gives `REFUSE_CELL`.
+Closed labels are checked after normalization; erased references to the
+parameter or earlier fields do not make a label dependent. The checked
+closed label core is retained for `D.g.E`.
+The checker elaborates the
+cofamily to text (choice (ii)) and checks each generated declaration:
+the positions `family D.pos := D.here | D.f (D.f.rest : D.pos) |
+D.g (D.g.label : D.g.E) (D.g.rest : D.pos)` (with `def D.g.E := E`),
+`def D := fun A => D.pos -> A`, the destructors `o : D A -> A` (the
+position `D.here`), `f : D A -> D A` and `g : D A -> E -> D A`, the walk
+`D.walk` (a fold over the positions that applies the steps from the
+seed), the corecursor `c : (A S : Type n) -> (S -> A) -> steps -> S ->
+D A` and the bisimulation principle `DBisim`. The steps and the
+hypotheses of `DBisim` follow the field order. The generated names are
+core names (rule R4): a definition that holds one gives `REFUSE_NAME`.
+The head of a corecursor value is the observation of the seed, and its
+tail is the corecursor at the next seed, by conversion. A state field of
+a cofamily type is a function type, so it gives `REFUSE_STATE`.
 A domain family can have an index telescope after its
 parameters: `family ChoiceBag : Size -> Type 0 := ...`, a Pi
 telescope that ends in `Type 0`. Each constructor of an indexed family

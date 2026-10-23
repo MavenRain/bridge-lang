@@ -486,6 +486,70 @@ int main(void) {
                "def good : Type 1 := W", NULL);
   ok &= domain("def eta : (p : Prod Nat Nat) -> Path (Prod Nat Nat) (pair (first p) (second p)) p := fun p => refl", NULL);
   ok &= domain("def eta : (p : Sigma (n : Nat) (Path Nat n n)) -> Path (Sigma (n : Nat) (Path Nat n n)) (pack (witness p) (payload p)) p := fun p => refl", NULL);
+  /* A cofamily is a cocell signature (S4, rule R1): one type parameter, one
+     clause, exactly one observation `A`, and cofields `D A` or `E -> D A`
+     with E closed. */
+  ok &= domain("family Size := sz0 | szS (szPrev : Size)\n"
+               "cofamily Strm (A : Type 0) := strmCorec (strmHead : A) (strmTail : Strm A)", NULL);
+  ok &= domain("cofamily Tree (A : Type 0) := treeCorec (treeLabel : A) (treeLeft : Tree A) (treeRight : Tree A)", NULL);
+  ok &= domain("family Lab := l0 | l1\n"
+               "cofamily Br (A : Type 0) := brCorec (brHere : A) (brNext : Lab -> Br A)", NULL);
+  ok &= domain("cofamily Ident (A : Type 0) := identCorec (identOut : A)", NULL);
+  /* Closed labels are judged after normalization. Erased references to
+     the parameter, self and earlier observations need no local context. */
+  ok &= domain("family Lab := l0 | l1\n"
+               "cofamily Br (A : Type 0) := brCorec (brHere : A) "
+               "(brNext : ((fun (x : A) => Lab) brHere) -> Br A)\n"
+               "def branch : Br Lab := brCorec Lab Lab (fun (s : Lab) => s) (fun (s : Lab) (e : Lab) => e) l0\n"
+               "def branchLaw : Path Lab (brHere Lab (brNext Lab branch l1)) l1 := refl", NULL);
+  ok &= domain("family Lab := l0 | l1\n"
+               "cofamily Br (A : Type 0) := brCorec (brHere : A) "
+               "(brNext : ((fun (T : Type 0) => Lab) (Br A)) -> Br A)", NULL);
+  ok &= domain("cofamily Hi (A : Type 1) := hiCorec (hiOut : A) "
+               "(hiType : Type 0 -> Hi A) (hiNat : Nat -> Hi A)", NULL);
+  ok &= domain("cofamily Dep (A : Type 0) := depCorec (depOut : A) "
+               "(depNext : Path A depOut depOut -> Dep A)", "REFUSE_CELL");
+  ok &= domain("def U : Type 1 := Type 0\n"
+               "cofamily AliasCo (A : U) := aliasCoCorec (aliasCoOut : A) (aliasCoNext : AliasCo A)", NULL);
+  ok &= domain("cofamily Np := npCorec (npOut : Nat)", "REFUSE_CELL");
+  ok &= domain("family Lab := l0 | l1\n"
+               "cofamily Vp (n : Lab) := vpCorec (vpOut : Lab)", "REFUSE_CELL");
+  ok &= domain("cofamily Tp (A : Type 0) (B : Type 0) := tpCorec (tpOut : A)", "REFUSE_CELL");
+  ok &= domain("family Lab := l0 | l1\n"
+               "cofamily Ix (A : Type 0) : Lab -> Type 0 := ixCorec (ixOut : A) : Ix A l0", "REFUSE_CELL");
+  ok &= domain("cofamily Ab (A : Type 0) := abCorec (abOut : A) and Other := other", "REFUSE_CELL");
+  ok &= domain("cofamily No (A : Type 0) := noCorec (noNext : No A)", "REFUSE_CELL");
+  ok &= domain("cofamily Two (A : Type 0) := twoCorec (twoA : A) (twoB : A)", "REFUSE_CELL");
+  ok &= domain("family Lab := l0 | l1\n"
+               "cofamily Tg (A : Type 0) := tgCorec (tgOut : A) (tgTag : Lab)", "REFUSE_CELL");
+  ok &= domain("family Lab := l0 | l1\n"
+               "cofamily Dl (A : Type 0) := dlCorec (dlOut : A) (dlNext : Dl Lab)", "REFUSE_CELL");
+  ok &= domain("cofamily Dd (A : Type 0) := ddCorec (ddOut : A) (ddNext : Dd (Dd A))", "REFUSE_CELL");
+  ok &= domain("cofamily Ad (A : Type 0) := adCorec (adOut : A) (adNext : A -> Ad A)", "REFUSE_CELL");
+  ok &= domain("cofamily Pf (A : Type 0) := pfCorec (pfOut : A) (pfT : Pf A) (pfP : Path (Pf A) pfT pfT)", "REFUSE_CELL");
+  ok &= domain("cofamily Cf (A : Type 0) := cfCorec (cfOut : A) (cfNext : Cf A -> List (Cf A))", "REFUSE_CELL");
+  ok &= domain("cofamily Lu (A : Type 0) := luCorec (luOut : A) (luNext : Type 0 -> Lu A)", "REFUSE_CELL");
+  /* The generated names are R4 names: a bisimulation name, a destructor
+     name and a corecursor name that an earlier def holds are refused. */
+  ok &= domain("def StrmBisim : Type 1 := Type 0\n"
+               "cofamily Strm (A : Type 0) := strmCorec (strmHead : A) (strmTail : Strm A)", "REFUSE_NAME");
+  ok &= domain("def strmTail : Type 1 := Type 0\n"
+               "cofamily Strm (A : Type 0) := strmCorec (strmHead : A) (strmTail : Strm A)", "REFUSE_NAME");
+  ok &= domain("def strmCorec : Type 1 := Type 0\n"
+               "cofamily Strm (A : Type 0) := strmCorec (strmHead : A) (strmTail : Strm A)", "REFUSE_NAME");
+  /* The elaborated destructors and corecursor compute by conversion: the
+     head of the corecursor is the observation of the seed, and its tail is
+     the corecursor at the next seed. */
+  ok &= domain("family Size := sz0 | szS (szPrev : Size)\n"
+               "cofamily Strm (A : Type 0) := strmCorec (strmHead : A) (strmTail : Strm A)\n"
+               "def nats : Strm Size := strmCorec Size Size (fun (s : Size) => s) (fun (s : Size) => szS s) sz0\n"
+               "def headLaw : Path Size (strmHead Size nats) sz0 := refl\n"
+               "def tailLaw : Path (Strm Size) (strmTail Size nats) (strmCorec Size Size (fun (s : Size) => s) (fun (s : Size) => szS s) (szS sz0)) := refl", NULL);
+  ok &= domain("family Lab := l0 | l1\n"
+               "cofamily Br (A : Type 0) := brCorec (brHere : A) (brNext : Lab -> Br A)\n"
+               "def brStep : Lab -> Lab -> Lab := fun (s : Lab) (e : Lab) => e\n"
+               "def brAll : Br Lab := brCorec Lab Lab (fun (s : Lab) => s) brStep l0\n"
+               "def brLaw : Path Lab (brHere Lab (brNext Lab brAll l1)) l1 := refl", NULL);
   ok &= normal_roundtrip("Nat -> (A : Type 0) -> A -> A",
     "fun (i0 : Nat) (A : Type 0) (a : A) => transp (fun (i : I) => A) (~i1) a");
   /* Guest mode (orbit-lang S3): a program with no kit name checks, and a Nat

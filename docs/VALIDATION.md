@@ -234,6 +234,24 @@ because the Member of `dao3` is not `Pos n0`. The S10 mutants (MR1 to
 MR5, MO1 to MO6 and MP1 to MP6) ran in B6, and 17 of 17 are killed
 (docs/STATUS.md "## S10", finding D3). S10 is complete and closed.
 
+The S4 cocell comonads (O28) add the cofamily shape check and its text
+elaboration (src/front/check.c), the domain cofamily Stream, the laws in
+examples/cocell.lang, 5 eval rows, 2 check refusals and 27 fronttool rows.
+Mutants m1 (admit a second observation), m2 (walk order reversed) and m3
+(drop the closed-label check) are killed (3 of 3). The fronttool row
+`cofamily Two` kills m1 (got ok, want REFUSE_CELL). The fronttool row
+tailLaw (by refl) and lawExtendEps of examples/cocell.lang (PATH_END) kill
+m2. The fronttool row `cofamily Ad` kills m3 (got NAME_UNKNOWN, want
+REFUSE_CELL).
+
+The staged S4 review found that a closed label with erased local references
+passed the shape check but failed when its source was rechecked in an empty
+context (`NAME_UNKNOWN` for the parameter, or `REFUSE_REC` for the cofamily).
+The checker now retains the checked closed label core. Two new fronttool
+rows fail before this fix and pass after it; one also proves a labelled
+destructor computation by refl. Two further rows check mixed label universes
+and refusal of a label that still depends on an earlier observation.
+
 ## Ring sizes and gas of the written contract (S9 B3)
 
 `test/contract/ringN.lang` is a guest program with every DAO slot, N

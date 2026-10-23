@@ -160,6 +160,7 @@ static int starts_atom(TokKind kind) {
     case TOK_KW_STATE:
     case TOK_KW_EVENT:
     case TOK_KW_AND:
+    case TOK_KW_COFAMILY:
       return 0;
   }
   return 0;
@@ -396,6 +397,7 @@ static const Term *parse_atom(Parser *p) {
     case TOK_KW_STATE:
     case TOK_KW_EVENT:
     case TOK_KW_AND:
+    case TOK_KW_COFAMILY:
       break;
   }
   fail_at(p, tok, "a term");
@@ -526,9 +528,11 @@ static int parse_axiom(Parser *p, Decl *d) {
   return d->type != NULL;
 }
 
+/* A cofamily has the form of a family (S4): its one constructor is the
+   corecursor and its fields are the observations. */
 static int parse_family(Parser *p, Decl *d) {
+  d->kind = at(p, TOK_KW_COFAMILY) ? DECL_COFAMILY : DECL_FAMILY;
   bump(p);
-  d->kind = DECL_FAMILY;
   d->name = take_name(p, "a family name");
   if (d->name == NULL) return 0;
   p->def = d->name;
@@ -586,9 +590,10 @@ static int parse_event(Parser *p, Decl *d) {
 }
 
 /* `and NAME params [: index] := ctor | ...` (S6): the next sort of the
-   block that FIRST starts. Only a `family` declaration starts a block. */
+   block that FIRST starts. Only a `family` declaration starts a block; a
+   `cofamily` is parsed with its block so that the checker refuses it (S4). */
 static int at_and(const Parser *p, const Decl *first) {
-  return at(p, TOK_KW_AND) && first->kind == DECL_FAMILY && !first->is_state && !first->is_event;
+  return at(p, TOK_KW_AND) && (first->kind == DECL_FAMILY || first->kind == DECL_COFAMILY) && !first->is_state && !first->is_event;
 }
 
 static int parse_and(Parser *p, Decl *d) {
@@ -614,7 +619,8 @@ static int parse_decl(Parser *p, Decl *d) {
     case TOK_KW_DEF: return parse_def(p, d);
     case TOK_KW_AXIOM: return parse_axiom(p, d);
     case TOK_KW_FAMILY:
-    case TOK_KW_STATE: return parse_family(p, d);
+    case TOK_KW_STATE:
+    case TOK_KW_COFAMILY: return parse_family(p, d);
     case TOK_KW_EVENT: return parse_event(p, d);
     case TOK_EOF:
     case TOK_IDENT:
@@ -642,7 +648,7 @@ static int parse_decl(Parser *p, Decl *d) {
     case TOK_KW_AND:
       break;
   }
-  return fail_at(p, tok, "'def', 'axiom', 'family', 'state' or 'event'");
+  return fail_at(p, tok, "'def', 'axiom', 'family', 'cofamily', 'state' or 'event'");
 }
 
 int parse_source(Arena *arena, const char *source, Origin origin, const TokenList *toks, DeclList *list, Diag *diag) {
