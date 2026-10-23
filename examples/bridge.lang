@@ -1,0 +1,200 @@
+-- Part B, the bridge steps on the guest side (docs/PLAN.md 3.3, 4.4, 5 and the S6 row).
+-- A guest file is checked alone. So the pool defs up to swapOut are a copy of examples/pool.lang (Q-S6-1).
+-- u256Add traps on an overflow. u256Sub stops at 0.
+
+def top : U256 := 0x8000000000000000000000000000000000000000000000000000000000000000u
+def wMax : U256 := 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffu
+def bound : U256 := 0xffffffffffffffffffffffffffffffffu
+
+-- The 256 powers of two, the smallest first. The step stops at 2^255, so no word overflows.
+def pows : List U256 := unfold (fun (p : U256) => some (pair p (flagIf (u256Eq p top) p (u256Add p p)))) 256 1u
+
+-- powsAt a b is pows when a and b are words. For an open a or b it does not reduce, so a fold over it
+-- stops at once. Without it, a type with an open product makes a normal form of exponential size.
+def powsAt : U256 -> U256 -> List U256 := fun (a b : U256) => flagIf (u256Eq a a) (flagIf (u256Eq b b) pows nil) nil
+
+-- zeroTrap d is 0. It traps when d is 0.
+def zeroTrap : U256 -> U256 := fun (d : U256) => u256Sub (u256Add wMax (flagIf (u256Eq d 0u) 1u 0u)) wMax
+
+-- mul a b reads the bits of b from the top (the fold starts at the last power). A product of 2^256 or more traps.
+def mulBit : (a p acc rest : U256) -> Prod U256 U256 := fun (a p acc rest : U256) =>
+  flagIf (u256Le p rest) (pair (u256Add (u256Add acc acc) a) (u256Sub rest p)) (pair (u256Add acc acc) rest)
+def mul : U256 -> U256 -> U256 := fun (a b : U256) =>
+  first (fold (fun (p : U256) (s : Prod U256 U256) => mulBit a p (first s) (second s)) (pair 0u b) (powsAt a b))
+
+-- divFloor n d is the long division of n by d. The state is the quotient, the rest and the bits of n not read.
+-- d must be below 2^255. A divisor of 0 traps.
+def divNext : (d p q rem rest : U256) -> Prod U256 (Prod U256 U256) := fun (d p q rem rest : U256) =>
+  flagIf (u256Le d rem) (pair (u256Add q p) (pair (u256Sub rem d) rest)) (pair q (pair rem rest))
+def divBit : (d p q rem rest : U256) -> Prod U256 (Prod U256 U256) := fun (d p q rem rest : U256) =>
+  flagIf (u256Le p rest) (divNext d p q (u256Add (u256Add rem rem) 1u) (u256Sub rest p)) (divNext d p q (u256Add rem rem) rest)
+def divFloor : U256 -> U256 -> U256 := fun (n d : U256) =>
+  u256Add (zeroTrap d) (first (fold (fun (p : U256) (s : Prod U256 (Prod U256 U256)) =>
+    divBit d p (first s) (first (second s)) (second (second s))) (pair 0u (pair 0u n)) (powsAt n d)))
+def divCeil : U256 -> U256 -> U256 := fun (n d : U256) =>
+  u256Add (divFloor n d) (flagIf (u256Eq (mul (divFloor n d) d) n) 0u 1u)
+
+-- Check the whole result before exposing either coordinate. A check inside just one
+-- field can be skipped by projecting the other field in the lazy evaluator.
+def badReserves : Prod U256 U256 := pair (u256Add wMax 1u) (u256Add wMax 1u)
+def checkedReserves : U256 -> U256 -> Prod U256 U256 := fun (x y : U256) =>
+  flagIf (u256Le 1u x) (flagIf (u256Le x bound)
+    (flagIf (u256Le 1u y) (flagIf (u256Le y bound) (pair x y) badReserves) badReserves) badReserves) badReserves
+
+-- The order as a proof, Positive (the Pos of PLAN 3.2, O20) and Pool k (PLAN 3.2, 4.2).
+def Le : U256 -> U256 -> Type 0 := fun (a b : U256) => Path Flag (u256Le a b) flagYes
+def Lt : U256 -> U256 -> Type 0 := fun (a b : U256) => Le (u256Add a 1u) b
+def Positive : Type 0 := (n : U256) * Le 1u n
+def Pool : U256 -> Type 0 := fun (k : U256) => (x : Positive) * (y : Positive) * Le k (mul (witness x) (witness y))
+def mkPool : (k x y : U256) -> Le 1u x -> Le 1u y -> Le k (mul x y) -> Pool k :=
+  fun (k x y : U256) (hx : Le 1u x) (hy : Le 1u y) (hk : Le k (mul x y)) => pack (pack x hx) (pack (pack y hy) hk)
+def resX : (k : U256) -> Pool k -> U256 := fun (k : U256) (p : Pool k) => witness (witness p)
+def resY : (k : U256) -> Pool k -> U256 := fun (k : U256) (p : Pool k) => witness (witness (payload p))
+
+-- The checker has no dependent Flag eliminator. Callers supply the arithmetic
+-- evidence explicitly; each public operation returns a pool carrying that evidence.
+def PoolLaw : U256 -> Prod U256 U256 -> Type 0 := fun (k : U256) (r : Prod U256 U256) =>
+  Prod (Le 1u (first r)) (Prod (Le 1u (second r)) (Le k (mul (first r) (second r))))
+def poolFromWords : (k : U256) -> (r : Prod U256 U256) -> PoolLaw k r -> Pool k :=
+  fun (k : U256) (r : Prod U256 U256) (h : PoolLaw k r) =>
+    mkPool k (first r) (second r) (first h) (first (second h)) (second (second h))
+def poolWords : (k : U256) -> Pool k -> Prod U256 U256 := fun (k : U256) (p : Pool k) => pair (resX k p) (resY k p)
+def reserveProduct : Prod U256 U256 -> U256 := fun (r : Prod U256 U256) => mul (first r) (second r)
+
+-- swapIn (PLAN 4.2): dx goes in, floor (y * dx / (x + dx)) goes out.
+def outIn : (x y dx : U256) -> U256 := fun (x y dx : U256) => divFloor (mul y dx) (u256Add x dx)
+def swapInW : (x y dx : U256) -> Prod U256 U256 := fun (x y dx : U256) => checkedReserves (u256Add x dx) (u256Sub y (outIn x y dx))
+def swapIn : (k : U256) -> (p : Pool k) -> (dx : Positive) -> PoolLaw k (swapInW (resX k p) (resY k p) (witness dx)) -> Pool k :=
+  fun (k : U256) (p : Pool k) (dx : Positive) (h : PoolLaw k (swapInW (resX k p) (resY k p) (witness dx))) =>
+    poolFromWords k (swapInW (resX k p) (resY k p) (witness dx)) h
+
+-- swapOut (PLAN 4.2): c goes out, ceil (x * c / (y - c)) goes in. The proof says c < y.
+def inOut : (x y c : U256) -> U256 := fun (x y c : U256) => divCeil (mul x c) (u256Sub y c)
+def swapOutW : (x y c : U256) -> Prod U256 U256 := fun (x y c : U256) => checkedReserves (u256Add x (inOut x y c)) (u256Sub y c)
+def swapOut : (k : U256) -> (p : Pool k) -> (c : U256) -> Lt c (resY k p) -> PoolLaw k (swapOutW (resX k p) (resY k p) c) -> Pool k :=
+  fun (k : U256) (p : Pool k) (c : U256) (h : Lt c (resY k p)) (hp : PoolLaw k (swapOutW (resX k p) (resY k p) c)) =>
+    poolFromWords k (swapOutW (resX k p) (resY k p) c) hp
+
+-- Part B names (PLAN 3.3). A side is one of two points. Credit is the virtual reserve y of a pool.
+def Side : Type 0 := Fin 2
+def sideA : Side := 0
+def sideB : Side := 1
+def Credit : Type 0 := U256
+
+-- Key is a one-time BN254 G1 key as its two affine coordinates (examples/bn254.lang). S8 adds the claim rings.
+def Key : Type 0 := Prod U256 U256
+
+-- Denom is the finite set of credit denominations (Q7, O22): 10 and 100.
+def isDenom : U256 -> Flag := fun (c : U256) => flagIf (u256Eq c 10u) flagYes (u256Eq c 100u)
+def Denom : Type 0 := (c : U256) * Path Flag (isDenom c) flagYes
+def Msg : Type 0 := (key : Key) * Denom
+def mkMsg : (a b c : U256) -> Path Flag (isDenom c) flagYes -> Msg :=
+  fun (a b c : U256) (h : Path Flag (isDenom c) flagYes) => pack (pair a b) (pack c h)
+def credit : Msg -> Credit := fun (m : Msg) => witness (payload m)
+
+-- InFlight (PLAN 3.3) is Bag Msg. The kernel Bag has a Size index, and a sum over it needs a path
+-- from u256Add a (u256Add b r) to u256Add b (u256Add a r) at an open r (Q-S6-2). So S6 keeps the
+-- messages in a list, in batch order, and sums the list.
+def InFlight : Type 0 := List Msg
+def sumCredit : InFlight -> U256 := fun (f : InFlight) => fold (fun (m : Msg) (s : U256) => u256Add (credit m) s) 0u f
+
+-- BridgeState (PLAN 3.3) and its total, yA + yB + the credit in flight (PLAN 4.4, 5).
+def BridgeState : U256 -> U256 -> Type 0 := fun (kA kB : U256) => Prod (Pool kA) (Prod (Pool kB) InFlight)
+def total : (kA kB : U256) -> BridgeState kA kB -> U256 := fun (kA kB : U256) (s : BridgeState kA kB) =>
+  u256Add (resY kA (first s)) (u256Add (resY kB (first (second s))) (sumCredit (second (second s))))
+
+-- deposit (PLAN 4.4, source side): the asset goes in and c credit goes out by swapOut c.
+-- The message (P, c) goes in the open batch. The precondition and the PoolLaw proof are arguments (Q-S5-2).
+def deposit : (k : U256) -> (p : Pool k) -> (m : Msg) -> (batch : InFlight) -> Lt (credit m) (resY k p) -> PoolLaw k (swapOutW (resX k p) (resY k p) (credit m)) -> Prod (Pool k) InFlight :=
+  fun (k : U256) (p : Pool k) (m : Msg) (batch : InFlight) (h : Lt (credit m) (resY k p)) (hp : PoolLaw k (swapOutW (resX k p) (resY k p) (credit m))) =>
+    pair (swapOut k p (credit m) h hp) (cons m batch)
+
+-- seal: the open batch closes. A sealed batch names its side and its number (O14).
+def Sealed : Type 0 := Prod Side (Prod U256 InFlight)
+def seal : Side -> U256 -> InFlight -> Sealed := fun (s : Side) (n : U256) (b : InFlight) => pair s (pair n b)
+def sealedMsgs : Sealed -> InFlight := fun (s : Sealed) => second (second s)
+
+-- accept (destination side): a sealed batch and its attestation, a BN254 Schnorr signature as two words.
+-- S7 checks the signature. Here accept takes it as an argument and keeps it with the batch.
+def Sig : Type 0 := Prod U256 U256
+def Accepted : Type 0 := Prod Sealed Sig
+def accept : Sealed -> Sig -> Accepted := fun (s : Sealed) (g : Sig) => pair s g
+
+-- Mem m a: the message m is in the accepted batch a. S8 replaces this proof with a bLSAG ring claim.
+def sameMsg : Msg -> Msg -> Flag := fun (m n : Msg) =>
+  flagIf (u256Eq (first (witness m)) (first (witness n)))
+    (flagIf (u256Eq (second (witness m)) (second (witness n))) (u256Eq (credit m) (credit n)) flagNo) flagNo
+def inBatch : Msg -> InFlight -> Flag := fun (m : Msg) (b : InFlight) =>
+  fold (fun (n : Msg) (r : Flag) => flagIf (sameMsg m n) flagYes r) flagNo b
+def Mem : Msg -> Accepted -> Type 0 := fun (m : Msg) (a : Accepted) => Path Flag (inBatch m (sealedMsgs (first a))) flagYes
+-- The fold visits the tail first. Its flag records whether one occurrence was consumed.
+def removeStart : Prod Flag InFlight := pair flagNo nil
+def removeMsg : Msg -> InFlight -> InFlight := fun (m : Msg) (b : InFlight) =>
+  second (fold (fun (n : Msg) (r : Prod Flag InFlight) =>
+    flagIf (first r) (pair flagYes (cons n (second r)))
+      (flagIf (sameMsg m n) (pair flagYes (second r)) (pair flagNo (cons n (second r)))))
+    removeStart b)
+
+-- claim (PLAN 4.4, destination side): c credit goes in and floor (x * c / (y + c)) of the asset goes out.
+-- This is swapIn with the roles of x and y exchanged, so outIn y x c is the asset that goes out (O23).
+def claimW : (x y c : U256) -> Prod U256 U256 := fun (x y c : U256) => checkedReserves (u256Sub x (outIn y x c)) (u256Add y c)
+def claim : (k : U256) -> (p : Pool k) -> (a : Accepted) -> (m : Msg) -> Mem m a -> PoolLaw k (claimW (resX k p) (resY k p) (credit m)) -> Pool k :=
+  fun (k : U256) (p : Pool k) (a : Accepted) (m : Msg) (h : Mem m a) (hp : PoolLaw k (claimW (resX k p) (resY k p) (credit m))) =>
+    poolFromWords k (claimW (resX k p) (resY k p) (credit m)) hp
+
+-- The steps at fixed values. Both pools start at (1000, 1000) with k0 = 1000000.
+def k0 : U256 := 1000000u
+def p0 : Pool k0 := mkPool k0 1000u 1000u refl refl refl
+def m100 : Msg := mkMsg 7u 9u 100u refl
+def m10 : Msg := mkMsg 3u 4u 10u refl
+def s0 : BridgeState k0 k0 := pair p0 (pair p0 nil)
+
+-- deposit 100 on side A takes 112 in and gives (1112, 900).
+def dep : Prod (Pool k0) InFlight := deposit k0 p0 m100 nil refl (pair refl (pair refl refl))
+def s1 : BridgeState k0 k0 := pair (first dep) (pair p0 (second dep))
+def batch1 : Sealed := seal sideA 1u (second dep)
+def acc1 : Accepted := accept batch1 (pair 1u 2u)
+
+-- claim 100 on side B pays 90 out and gives (910, 1100). The message leaves InFlight.
+def pClaim : Pool k0 := claim k0 p0 acc1 m100 refl (pair refl (pair refl refl))
+def s2 : BridgeState k0 k0 := pair (first dep) (pair pClaim (removeMsg m100 (second dep)))
+
+-- Conservation (PLAN 4.4, 5) at fixed values: the total is 2000 in each state.
+def lawTotal : Path U256 (total k0 k0 s0) 2000u := refl
+def lawDeposit : Path U256 (total k0 k0 s1) (total k0 k0 s0) := refl
+def lawClaim : Path U256 (total k0 k0 s2) (total k0 k0 s1) := refl
+-- The least solution of the claim: 90 out keeps the product, 91 out does not.
+def lawClaimPays : Path U256 (u256Sub 1000u (resX k0 pClaim)) 90u := refl
+def lawClaimBelow : Path Flag (u256Le k0 (mul 909u 1100u)) flagNo := refl
+
+-- ua e (PLAN 4.4, 5). The decimals agree, so e is the identity. Side B is the transport of side A
+-- along ua e, and by the Glue rule the transport of a closed value is e of that value.
+def uaAsset : Path (Type 0) U256 U256 := ua U256 U256 (idEquiv U256)
+def lawUaReserve : Path U256 (transport U256 U256 uaAsset (resX k0 (first dep))) 1112u := refl
+-- A transport of the whole Pool k0 value reaches the arena limit (OOM, Q-S6-3), so the law is on the reserve word.
+
+-- Values and entries for the evals.
+def sDep : Prod U256 U256 := poolWords k0 (first dep)
+def sClaim : Prod U256 U256 := poolWords k0 pClaim
+def sealHas : Flag := inBatch m100 (sealedMsgs batch1)
+def acceptHas : Flag := inBatch m10 (sealedMsgs (first acc1))
+def flight1 : U256 := sumCredit (second (second s1))
+def flight2 : U256 := sumCredit (second (second s2))
+def total0 : U256 := total k0 k0 s0
+def total1 : U256 := total k0 k0 s1
+def total2 : U256 := total k0 k0 s2
+def uaReserve : U256 := transport U256 U256 uaAsset (resX k0 (first dep))
+-- depKeeps c: a deposit of c at (1000, 1000) takes c from y, so y' + c is 1000.
+def depKeeps : Nat -> Flag := fun (c : Nat) => u256Eq (u256Add (second (swapOutW 1000u 1000u (toU256 c))) (toU256 c)) 1000u
+-- claimKeeps c: a claim of c at (1000, 1000) adds c to y, so y' - c is 1000.
+def claimKeeps : Nat -> Flag := fun (c : Nat) => u256Eq (u256Sub (second (claimW 1000u 1000u (toU256 c))) (toU256 c)) 1000u
+-- depositAll c: a deposit of the whole credit reserve traps. claimAtBound c: a claim that takes y past 2^128 - 1 traps.
+def depositAll : Nat -> Flag := fun (c : Nat) => u256Le 1u (first (swapOutW 1000u 1000u (toU256 c)))
+def claimAtBound : Nat -> Flag := fun (c : Nat) => u256Le (first (claimW 1000u bound (toU256 c))) bound
+
+-- Equal messages still represent separate deposits. One claim consumes one occurrence.
+def duplicateBatch : InFlight := cons m100 (cons m10 (cons m100 nil))
+def duplicateRemaining : U256 := sumCredit (removeMsg m100 duplicateBatch)
+def absentRemaining : U256 := sumCredit (removeMsg m10 (cons m100 nil))
+def emptyRemaining : U256 := sumCredit (removeMsg m100 nil)
+def duplicateClaimTotal : U256 := total k0 k0 (pair p0 (pair pClaim (removeMsg m100 (cons m100 (cons m100 nil)))))

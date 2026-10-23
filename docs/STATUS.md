@@ -155,3 +155,82 @@ differential 28 guest evals, 14 host runs and 14 EVM rows, runs 5, run
 refusals 10, lower refusals 16, build checks 33, precompile steps 128,
 evm steps 43, mock 13 rows, diff 15 rows, emit 24 executions, and the
 regressions.
+
+## S6
+
+Slice S6 (Part B, the bridge steps on the guest side, docs/PLAN.md
+sections 3.3, 4.4, 5 and 9) is complete. The change is not committed; its
+base is cf2a1a2. The gate `make clean` then `make check` is GREEN, exit 0.
+Part B is guest code only: no src file changes. The code was written by
+hand, because the builder agent stopped two times on an API classifier
+error.
+
+Changes:
+
+- `examples/bridge.lang` (new): a copy of the pool defs of
+  `examples/pool.lang` up to `swapOut` (`capped` is not in the copy;
+  Q-S6-1, O21), then Part B: `Side` (`Fin 2`; `sideA`, `sideB`),
+  `Credit` (`U256`), `Key` (the two affine words of a BN254 G1 point),
+  `isDenom` and `Denom` (the words 10 and 100, O22), `Msg`, `mkMsg`,
+  `credit`, `InFlight` (`List Msg`, Q-S6-2), `sumCredit`, `BridgeState kA
+  kB`, `total` (yA + yB + the credit in flight), `deposit`, `Sealed`,
+  `seal` (the side and the batch number, O14), `sealedMsgs`, `Sig`,
+  `Accepted`, `accept`, `sameMsg`, `inBatch`, `Mem`, `removeMsg`, `claimW`
+  (the exchanged swap, O23) and `claim`.
+- `deposit` takes `Lt (credit m) (resY k p)` and a `PoolLaw` proof, as the
+  S5 operations do (Q-S5-2). `accept` takes the attestation as an
+  argument; S7 checks it. `claim` takes a `Mem m a` proof; S8 replaces it
+  with a bLSAG ring claim.
+- Fixed values: both pools start at (1000, 1000) with k0 = 1000000. A
+  deposit of 100 takes 112 in and gives (1112, 900). A claim of 100 pays
+  90 out and gives (910, 1100). Laws by refl: `lawTotal` (2000),
+  `lawDeposit` (the total after the deposit is the total before),
+  `lawClaim` (the same for the claim), `lawClaimPays` (90 out),
+  `lawClaimBelow` (909 * 1100 is less than k0), `lawUaReserve` (the
+  transport of the reserve 1112 along `ua U256 U256 (idEquiv U256)` is
+  1112).
+- `examples/kit.txt`: `bridge.lang`.
+- `test/bridge/` (new): 3 refusals, all `PATH_END`, with
+  `examples/bridge.lang` as the prelude: a claim of a message that is not
+  in the batch, a claim that pays 91 out for 100 in (999900 is less than
+  k0), and a deposit that drops its message (1900, not 2000).
+- `test/gate.sh` line 52: `refusals test/bridge bridge
+  examples/bridge.lang` (O24).
+- `test/eval/expect.txt`: 19 `bridge` rows: the pool words after the
+  deposit and after the claim, the batch membership (1 for the message
+  in the batch, 0 for a message that is not), the credit in flight (100,
+  then 0), the total in each of the three states (2000), the transported
+  reserve (1112), the least solutions (`depKeeps` 10 and 100, `claimKeeps`
+  100), and 2 traps: a deposit of the whole credit reserve, and a claim
+  that takes y past `2^128 - 1` (read through the x projection).
+  Review regressions cover removing one of several equal messages,
+  removing an absent message, removing from an empty batch, and
+  conserving the total when a second equal deposit remains in flight.
+  `removeMsg` consumes one occurrence, preserving the other deposits.
+
+Traps found in S6:
+
+- A transport along `ua` at `Pool k0` (a Sigma with `mul` in its type)
+  stops with `OOM: lawUaPool: the arena limit is reached` after 1.38 s. At
+  a `U256` word it reduces by refl. So the `ua` law is on the reserve word
+  (Q-S6-3).
+- A sum over the kernel `Bag` needs, in the swap case, a path from
+  `u256Add a (u256Add b r)` to `u256Add b (u256Add a r)` at an open r. No
+  rule gives it, so `InFlight` is a list in S6 (Q-S6-2).
+- An eval of a Flag prints 1 or 0, not `flagYes` or `flagNo`.
+- The gate puts the prelude and the refusal file into one file. So a
+  refusal file must not use a name that the prelude defines. The refusal
+  files use `bad`, which no prelude defines.
+
+| Count | S5 | S6 | Reason |
+|---|---|---|---|
+| examples | 42 | 43 | `bridge.lang` |
+| bridge refusals | none | 3 | `test/bridge`, with `examples/bridge.lang` as the prelude |
+| evals | 180 | 199 | 19 `bridge` rows |
+
+The other counts do not change: parse refusals 19, check refusals 171,
+pool refusals 4, kit-only refusals 22, proves 2, contracts 2 written 5
+refused, rings 6 built 2 refused, differential 28 guest evals, 14 host
+runs and 14 EVM rows, runs 5, run refusals 10, lower refusals 16, build
+checks 33, precompile steps 128, evm steps 43, mock 13 rows, diff 15
+rows, emit 24 executions, and the regressions.

@@ -49,6 +49,7 @@ refusals() {
 refusals test/parse parse
 refusals test/check check
 refusals test/pool pool examples/pool.lang
+refusals test/bridge bridge examples/bridge.lang
 
 # A REFUSE_KIT row refuses a kit item in guest mode only: `langc --kit check`
 # must print ok.

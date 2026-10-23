@@ -1,0 +1,2 @@
+-- A claim of m10, a key that is not in the accepted batch.
+def bad : Pool 1000000u := claim k0 p0 acc1 m10 refl (pair refl (pair refl refl))

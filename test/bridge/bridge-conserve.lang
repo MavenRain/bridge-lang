@@ -1,0 +1,2 @@
+-- A deposit that drops its message from InFlight breaks conservation: 1900 is not 2000.
+def bad : Path U256 (total k0 k0 (pair (first dep) (pair p0 nil))) (total k0 k0 s0) := refl

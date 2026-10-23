@@ -368,7 +368,7 @@ The ring size bounds the gas of `claim` (O17).
 | S3 | R1 narrowing: `REFUSE_CELL`, the free monoid, the former matrix as CM and CC rows (port from intent-lang S3 when it exists) | PLANNED |
 | S4 | `Trace` as the free category CM in a slice; the category laws; the meaning functor; `Stream` of batches (CC) | PLANNED |
 | S5 | Part P: `Pos`, `Pool k`, `swapIn`, `swapOut`, the least-solution law, `addLiq`, `removeLiq`, the overflow bound | DONE (2026-10-22): examples 42, parse refusals 19, check refusals 171, pool refusals 4, kit-only refusals 22, evals 180, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
-| S6 | Part B: credit, `InFlight`, `deposit`, `seal`, `accept`, `claim` on the guest side; conservation; `ua e` transport | PLANNED |
+| S6 | Part B: credit, `InFlight`, `deposit`, `seal`, `accept`, `claim` on the guest side; conservation; `ua e` transport | DONE (2026-10-22): examples 43, parse refusals 19, check refusals 171, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 199, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | PLANNED |
 | S8 | `ZKBridge` as the mapping cylinder; `ZKBridge ≃ BridgeState`; bLSAG claim rings and key images | PLANNED |
 | S9 | Part D: encrypted ballots, `tallyEnc`, the tally law, liquidity Decisions, the remote enactment | PLANNED |
@@ -431,6 +431,18 @@ The ring size bounds the gas of `claim` (O17).
   of a bag (`domain/domain.lang` line 71, orbit-lang S7 B3). A guest
   `def Pos` gives `REFUSE_NAME` (rule R4). So the name in the code is
   `Positive`. Builder call.
+- O21: Q-S6-1 (a) is taken: `examples/bridge.lang` holds a copy of the
+  pool defs of `examples/pool.lang` up to `swapOut`. Builder call.
+- O22: `Denom` is the words 10 and 100 as a refinement of `U256` (the
+  `Positive` form). `Side` is `Fin 2`. `Key` is the two affine words of a
+  BN254 G1 point. The names Side, Asset, Credit, Msg, Denom, InFlight,
+  BridgeState, deposit, seal, accept, claim, Key, Sealed, Accepted, Mem
+  and Sig have no clash in `domain/domain.lang` or as a name in
+  `src/front/check.c`. Builder call.
+- O23: the exchanged swap `claimW` is in `examples/bridge.lang`, so
+  `examples/pool.lang` and its rows stay as committed. Builder call.
+- O24: `test/gate.sh` line 52, `refusals test/bridge bridge
+  examples/bridge.lang` (the S5 form; no new harness). Builder call.
 
 ## 11. Questions for the USER (S1)
 
@@ -507,3 +519,25 @@ All ten are RULED (S1, 2026-10-22; the quote is in section 1).
   `rule_flag_if`), so that `swapIn : Pool k -> Positive -> Option (Pool
   k)` checks the invariant at run time. This is a src change (the Q-S5-1
   rulings apply).
+
+### S6 questions (OPEN)
+
+- Q-S6-1 (the pool defs in a second example). (a) copy them in
+  `examples/bridge.lang`; the gate checks each guest file alone.
+  RECOMMENDED, taken (O21). (b) a prelude form for examples and evals in
+  `test/gate.sh`, so that `examples/bridge.lang` reads
+  `examples/pool.lang` and holds no copy.
+- Q-S6-2 (the `InFlight` carrier). (a) `List Msg` in batch order until
+  bridge-lang S3 ports the intent-lang free commutative monoid; then
+  `InFlight` becomes that bag. RECOMMENDED. (b) a kit path rule for the
+  commutativity of `u256Add` (a src change: the BUILTINS table,
+  `src/front/check.c` line 129; `u256Add` is at line 184), so that a sum
+  over the current `Bag` checks now. (c) a count for each denomination in
+  a pair of Nat; it needs a dependent eliminator on `Fin 2` (there is
+  none; the Q-S5-2 site, `src/front/check.c` line 2286).
+- Q-S6-3 (`ua e` on a whole pool value). (a) the law on the reserve word;
+  the S10 two-deployment differential checks the same bytecode on the
+  two sides. RECOMMENDED. (b) a larger arena, or a lazy Glue transport at
+  a Sigma (a src change; the limit is at `src/front/eval.c` line 90).
+
+Q-S2-1, Q-S5-1 and Q-S5-2 stay OPEN.

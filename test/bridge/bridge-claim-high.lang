@@ -1,0 +1,2 @@
+-- A claim that pays 91 out for 100 credit in leaves a product of 999900, below k0.
+def bad : Pool 1000000u := poolFromWords k0 (pair 909u 1100u) (pair refl (pair refl refl))
