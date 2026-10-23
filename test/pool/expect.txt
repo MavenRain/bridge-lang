@@ -1,0 +1,4 @@
+pool-swap-high.lang PATH_END
+pool-addliq-price.lang PATH_END
+pool-swapout-all.lang PATH_END
+pool-remove-price.lang PATH_END

@@ -1,0 +1,2 @@
+-- At (1000, 1000), a proportional withdrawal of 100 x requires 100 y.
+def bad : Share 1000u 1000u 100u 0u := pair refl (pair refl refl)

@@ -24,13 +24,17 @@ mkdir -p "$tmp"
 awk 'BEGIN { printf "def deep : Nat := " } { } END {
   for (i = 0; i < 1100; i++) printf "("; printf "1"; for (i = 0; i < 1100; i++) printf ")"; print "" }' </dev/null >"$tmp/deep.lang"
 
-# refusals DIR LABEL: each line of DIR/expect.txt is `FILE CODE`. `langc check`
+# refusals DIR LABEL [PRELUDE]: each line of DIR/expect.txt is `FILE CODE`. `langc check`
 # must exit 1 and print `langc: CODE: ...` on stderr.
 refusals() {
   checked=0
   while read -r file code; do
     path="$1/$file"
     [ "$file" = "deep.lang" ] && path="$tmp/deep.lang"
+    if [ "$#" -eq 3 ]; then
+      cat "$3" "$path" >"$tmp/refusal.lang"
+      path="$tmp/refusal.lang"
+    fi
     status=0
     build/langc $(kit "$1/kit.txt" "$file") check "$path" 2>"$tmp/err" >/dev/null || status=$?
     first=$(head -n 1 "$tmp/err")
@@ -44,6 +48,7 @@ refusals() {
 }
 refusals test/parse parse
 refusals test/check check
+refusals test/pool pool examples/pool.lang
 
 # A REFUSE_KIT row refuses a kit item in guest mode only: `langc --kit check`
 # must print ok.

@@ -1,0 +1,2 @@
+-- A swap cannot withdraw the entire y reserve.
+def bad : Lt 1000u 1000u := refl

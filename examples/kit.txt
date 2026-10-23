@@ -29,3 +29,4 @@ elim.lang
 bn254.lang
 zk.lang
 zkcast.lang
+pool.lang

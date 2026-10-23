@@ -1,0 +1,2 @@
+-- At (1100, 910), 100 x requires 83 y rounded toward the pool.
+def bad : PriceEq 1100u 910u 100u 82u := pair refl refl

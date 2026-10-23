@@ -1,0 +1,2 @@
+-- Paying 91 out for 100 in leaves a product of 999900, below k0.
+def bad : Pool 1000000u := pack (pack 1100u refl) (pack (pack 909u refl) refl)
