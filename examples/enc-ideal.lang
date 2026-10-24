@@ -1,0 +1,25 @@
+-- The ideal model of Enc in kit mode (S5, rule O7). The kit is the trusted
+-- test scope, so it may evaluate decrypt, observe and the projection encOf.
+-- An Enc value is an encEta term: decrypt is its fold, observe is decrypt
+-- under trunc1.
+def sizeAdd : Size -> Size -> Size :=
+  fun (n : Size) (m : Size) => fold m (fun (r : Size) => szS r) n
+def encOne : Enc Size := encEta Size (szS sz0)
+def encSum : Enc Size := encOp2 Size Size Size sizeAdd encOne encOne
+def openSum : Size := decrypt Size encSum
+def openOne : Size := encOf encOne
+def seenSum : Trunc1 Size := observe Size encSum
+
+-- The quorum open of S7 s1 (Q-S7-3 (a)). open, decEta and openAt open a
+-- ciphertext and return A or Size, so a guest program refuses them
+-- (REFUSE_LAW, rule O7). The kit is the trusted scope. A quorum is one
+-- witness: open is decrypt under the quorum.
+def Quorum : Type 0 := Unit
+def open : (A : Type 0) -> Quorum -> Enc A -> A :=
+  fun (A : Type 0) (q : Quorum) (c : Enc A) => decrypt A c
+-- open under a quorum is decrypt.
+def openLaw : (A : Type 0) -> (q : Quorum) -> (c : Enc A) -> Path A (open A q c) (decrypt A c) :=
+  fun (A : Type 0) (q : Quorum) (c : Enc A) => refl
+def two : Size := szS (szS sz0)
+def decEta : Size := decrypt Size (encEta Size two)
+def openAt : Size := open Size unit (encEta Size (szS two))

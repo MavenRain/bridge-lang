@@ -507,3 +507,60 @@ The other counts do not change: parse refusals 19, check refusals 177,
 pool refusals 4, bridge refusals 6, kit-only refusals 22, proves 2,
 contracts 2 written 5 refused, rings 6 built 2 refused, differential 28
 guest evals, runs 5.
+
+## S7 s2
+
+Slice S7 s2 (the port of intent-lang 1b65dec: the sealed `Enc` monad,
+the law-only `decrypt` and the host ElGamal, Q-S4-2 (a)) is complete,
+with the Q-S3-2 (a) item. The change is not committed; its base is the
+USER commit e77666f on 2f78a8e (the S4 s2 tree). The gate `make clean`
+then `make check` is GREEN, exit 0.
+
+Changes (O53 to O57):
+
+- The port of intent-lang 1b65dec (O53): `sealed family Enc` with
+  `encBind`, `encMap`, `encOp2` and the law defs `decrypt` and
+  `observe` in `domain/domain.lang`; the keywords `sealed` and `law`
+  (`src/front/lexer.c`, `src/front/lexer.h`, `src/front/parser.c` and
+  `src/front/ast.h`); the law-only rule O7 and the sealed check
+  (`src/front/check.c` and `src/front/core.h`); the host ElGamal
+  (`src/front/elgamal.c` and `src/front/elgamal.h`) and its tool
+  `test/elgamaltool.c` (8 rows); `Makefile`, `SPEC.md`,
+  `docs/VALIDATION.md` and `formers/FORMERS.md`; 11 fronttool rows.
+- `examples/enc.lang`: the intent-lang laws and values, then the
+  bridge-lang `etaLaw`, `bindLaw` (an `elim` proof), `privacyA`,
+  `fheHom`, `two` and `bindAt` (O55).
+- `examples/enc-ideal.lang` (new, kit): the intent-lang ideal model,
+  then the S7 s1 `Quorum`, `open`, `openLaw`, `two`, `decEta` and
+  `openAt` (Q-S7-3 (a), O56).
+- `test/check`: 8 new rows (`enc-fold`, `enc-decrypt`, `enc-leak`,
+  `enc-annot`, `enc-proj` and `enc-relay` with `REFUSE_LAW`,
+  `enc-state` with `REFUSE_STATE` under `--kit`, `law-guest` with
+  `REFUSE_DATA`); the comment of `enc-guest-family.lang`.
+- `test/eval/expect.txt`: 7 new rows after the `trace` rows; `decEta`
+  and `openAt` are `enc-ideal` rows; the `bindAt` value is an `encEta`
+  term.
+- Q-S3-2 (a) (O57): the 7 aacc8ad cases in `test/fronttool.c` and the
+  constant-line `transp` rule at `ZkBallot` in `src/front/eval.c`.
+
+Traps found in S7 s2:
+
+- The sealed `Enc` makes each guest def that opens a ciphertext
+  law-only. A def with a `Size` or A codomain is then `REFUSE_LAW`. The
+  guest `open`, `decEta` and `openAt` moved to the kit (O56).
+- On the sealed `Enc`, refl fails for `bindLaw` at a neutral `c`. The
+  proof is an `elim` on `c`, as the intent-lang `lawBind` (O55).
+- "rule O7" in the ported text is the intent-lang seal rule, not the
+  bridge-lang O7 (O54).
+- `enc-state.lang` is a `--kit` row with `REFUSE_STATE`, so the
+  kit-only refusals stay 22 (O58).
+
+| Count | S4 s2 | S7 s2 | Reason |
+|---|---|---|---|
+| examples | 49 | 50 | `enc-ideal.lang` |
+| check refusals | 177 | 185 | 8 intent-lang rows (O53) |
+| evals | 260 | 267 | 7 intent-lang rows; `decEta` and `openAt` move to `enc-ideal` and the `bindAt` value changes, with no count change (O56) |
+
+The other counts do not change: parse refusals 19, pool refusals 4,
+bridge refusals 6, kit-only refusals 22, proves 2, contracts 2 written 5
+refused, rings 6 built 2 refused, differential 28 guest evals, runs 5.

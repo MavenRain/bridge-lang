@@ -2522,10 +2522,16 @@ static const Value *transp_data(Machine *m, const Value *head, const Value *line
     return transp_family(m, line, phi, base);
   case OP_GLUE:
     return transp_glue(m, line, phi, base);
-  case OP_ZK_BALLOT:
-    /* The choice type can vary along the line. Its stored value must move
-       before it can be projected at the target type. */
+  case OP_ZK_BALLOT: {
+    const Value *start = line_at(m, line, val_iend(m, 0));
+    uint32_t level = KAN_FRESH_BASE + (m->fresh++ & KAN_FRESH_MASK);
+    if (start == NULL)
+      return NULL;
+    /* A varying choice type must not reuse the old stored choice. */
+    if (conv_values(m, level, head, start))
+      return base;
     break;
+  }
   case OP_INTERVAL:
   case OP_UNIT_VAL:
   case OP_FLAG_YES:

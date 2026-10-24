@@ -72,6 +72,26 @@ core names (rule R4): a definition that holds one gives `REFUSE_NAME`.
 The head of a corecursor value is the observation of the seed, and its
 tail is the corecursor at the next seed, by conversion. A state field of
 a cofamily type is a function type, so it gives `REFUSE_STATE`.
+The modifiers `sealed family` and `law def` are domain only (rule O7,
+S5). A program that uses one gives `REFUSE_DATA`. The domain declares
+`sealed family Enc (A : Type 0) := encEta (encOf : A)`, the identity cell
+monad with a sealed eliminator, with `encBind`, `encMap` and `encOp2`.
+It also declares two law defs: `decrypt : (A : Type 0) -> Enc A -> A` (the
+counit) and `observe : (A : Type 0) -> Enc A -> Trunc1 A` (decrypt under
+`Trunc1`). The law-only roots are a law def, an `elim` or a `fold` of a
+sealed family, and a projection of a field of a sealed family's
+constructor. A guest definition that uses a root or a law-only guest
+definition is law-only too. The checker walks the checked declared type
+before normalization, its quoted normal form, and the body of each guest
+definition. Explicit binder annotations are retained for this walk, even
+when their variables are unused. The walk does not enter an application of
+the type former `Trunc1` (the constructor `trunc1` has no exemption). A
+law-only guest definition must have a law type: after its Pi binders,
+the codomain is a `Path` or a `Trunc1`. Else the checker gives
+`REFUSE_LAW`. Kit mode records the law-only flag and does not refuse. A
+state field of type `Enc A` gives `REFUSE_STATE`. The host model is
+exponential ElGamal over BN254 G1 (`src/front/elgamal.c`, not guest
+visible).
 A domain family can have an index telescope after its
 parameters: `family ChoiceBag : Size -> Type 0 := ...`, a Pi
 telescope that ends in `Type 0`. Each constructor of an indexed family

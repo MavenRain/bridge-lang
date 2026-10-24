@@ -10,7 +10,7 @@
 /* checked parses TEXT with ORIGIN and checks it in MODE. A domain row is
    trusted text in kit mode; a guest row (orbit-lang S3) is program text in
    guest mode. */
-static int checked(const char *text, Origin origin, CheckMode mode, const char *want) {
+static int checked_in(const char *domain_text, const char *text, Origin origin, CheckMode mode, const char *want) {
   Arena arena;
   Diag diag;
   TokenList tokens = {0};
@@ -18,7 +18,10 @@ static int checked(const char *text, Origin origin, CheckMode mode, const char *
   Machine machine;
   arena_init(&arena, (size_t)1 << 24);
   diag_init(&diag);
-  int ok = lex_source(&arena, "test-domain", text, strlen(text), &tokens, &diag)
+  int ok = domain_text == NULL
+    || (lex_source(&arena, "test-prelude", domain_text, strlen(domain_text), &tokens, &diag)
+        && parse_source(&arena, "test-prelude", ORIGIN_DOMAIN, &tokens, &decls, &diag));
+  ok = ok && lex_source(&arena, "test-domain", text, strlen(text), &tokens, &diag)
     && parse_source(&arena, "test-domain", origin, &tokens, &decls, &diag)
     && check_program(&arena, &decls, &machine, &diag, mode);
   int passed = want == NULL ? ok : !ok && diag.code != NULL && strcmp(diag.code, want) == 0;
@@ -33,6 +36,20 @@ static int checked(const char *text, Origin origin, CheckMode mode, const char *
   }
   arena_release(&arena);
   return passed;
+}
+
+static int checked(const char *text, Origin origin, CheckMode mode, const char *want) {
+  return checked_in(NULL, text, origin, mode, want);
+}
+
+static int law_guest(const char *text, const char *want) {
+  return checked_in(
+    "family Size := sz0 | szS (szPred : Size)\n"
+    "family Trunc1 (A : Type 0) := trunc1 (trunc1Of : A)\n"
+    "  | squash1 (squash1X : Trunc1 A) (squash1Y : Trunc1 A) (i : I) [ ~i -> squash1X, i -> squash1Y ]\n"
+    "sealed family Enc (A : Type 0) := encEta (encOf : A)\n"
+    "law def decrypt : (A : Type 0) -> Enc A -> A := fun A c => fold (fun a => a) c\n",
+    text, ORIGIN_PROGRAM, CHECK_GUEST, want);
 }
 
 static int domain(const char *text, const char *want) {
@@ -205,6 +222,25 @@ int main(void) {
   ok &= prove_output(0, 0, NULL);
   ok &= prove_output(0, 0, "7u");
   ok &= prove_output(1, 0, NULL);
+  /* A ballot cannot project its choice at an unrelated type. */
+  ok &= domain("family Empty := emptyLoop (emptyOf : Empty)\n"
+               "def forged : Empty := zkProject Empty (zkCast Unit Unit unit unit)",
+               "TYPE_MISMATCH");
+  ok &= domain("def forged : ZkBallot Unit -> Sum Unit Unit := "
+               "fun b => zkProject (Sum Unit Unit) b", "TYPE_MISMATCH");
+  ok &= domain("def projected : (C : Type 0) -> ZkBallot C -> C := "
+               "fun (C : Type 0) (b : ZkBallot C) => zkProject C b", NULL);
+  ok &= domain("def bad : ZkWitness := zkProve unit", "TYPE_MISMATCH");
+  ok &= domain("def constant : (C : Type 0) -> (b : ZkBallot C) -> "
+               "Path (ZkBallot C) (transp (fun (_ : I) => ZkBallot C) i0 b) b := "
+               "fun (C : Type 0) (b : ZkBallot C) => refl", NULL);
+  ok &= normal_roundtrip("(p : Path (Type 0) Unit (Sum Unit Unit)) -> ZkBallot (Sum Unit Unit)",
+                         "fun (p : Path (Type 0) Unit (Sum Unit Unit)) => "
+                         "transp (fun (i : I) => ZkBallot (p @ i)) i0 (zkCast Unit Unit unit unit)");
+  /* Recursive occurrences under function domains remain forbidden in paths. */
+  ok &= domain("family Bad := base | mkBad (x : Bad) "
+               "(p : Path (Bad -> Bad) (fun (y : Bad) => x) (fun (y : Bad) => x))",
+               "DOMAIN_FAMILY");
   /* Projection only reads the stored choice, including under binders. */
   ok &= domain("def projected : (M : Type 0) -> (C : Type 0) -> (m : M) -> (c : C) -> "
                "Path C (zkProject C (zkCast M C m c)) c := "
@@ -529,6 +565,43 @@ int main(void) {
   ok &= domain("cofamily Pf (A : Type 0) := pfCorec (pfOut : A) (pfT : Pf A) (pfP : Path (Pf A) pfT pfT)", "REFUSE_CELL");
   ok &= domain("cofamily Cf (A : Type 0) := cfCorec (cfOut : A) (cfNext : Cf A -> List (Cf A))", "REFUSE_CELL");
   ok &= domain("cofamily Lu (A : Type 0) := luCorec (luOut : A) (luNext : Type 0 -> Lu A)", "REFUSE_CELL");
+  /* `sealed family` and `law def` are domain-only modifiers (S5, rule O7).
+     A sealed family is a cell monad; a program cannot use either. */
+  ok &= domain("sealed family Sl (A : Type 0) := slEta (slOf : A)", NULL);
+  ok &= domain("sealed family Sl (A : Type 0) := slEta (slOf : A)\n"
+               "law def slOut : (A : Type 0) -> Sl A -> A := fun A c => fold (fun a => a) c", NULL);
+  ok &= domain("sealed family Sc := sc0 | sc1", "REFUSE_CELL");
+  ok &= guest("sealed family Sl (A : Type 0) := slEta (slOf : A)", "REFUSE_DATA");
+  ok &= guest("law def lawId : Type 1 := Type 0", "REFUSE_DATA");
+  /* Law references in types and annotations must survive normalization and
+     erasure, including when the annotated variable is unused. */
+  ok &= law_guest("def erased : Enc Size -> Size := fun (c : Enc Size) =>\n"
+                  "  (fun (f : Path Size (decrypt Size c) (decrypt Size c) -> Size) => sz0) (fun p => sz0)", "REFUSE_LAW");
+  ok &= law_guest("def erasedType : Path Size (decrypt Size (encEta Size sz0)) sz0 -> Size := fun p => sz0", "REFUSE_LAW");
+  ok &= law_guest("def lawBody : (c : Enc Size) -> Path Size sz0 sz0 :=\n"
+                  "  fun c => fun (i : I) => (fun (x : Size) => sz0) (decrypt Size c)\n"
+                  "def erasedRelay : Path Size (lawBody (encEta Size sz0) @ i0) sz0 -> Size := fun p => sz0", "REFUSE_LAW");
+  ok &= law_guest("def checkedAnn : Size :=\n"
+                  "  (fun (f : Path Size sz0 sz0 -> Size) => sz0)\n"
+                  "    (fun (p : Path Size (decrypt Size (encEta Size sz0)) sz0) => sz0)", "REFUSE_LAW");
+  ok &= law_guest("def truncatedAnn : Enc Size -> Size := fun (c : Enc Size) =>\n"
+                  "  (fun (f : Trunc1 (Path Size (decrypt Size c) (decrypt Size c)) -> Size) => sz0) (fun p => sz0)", NULL);
+  ok &= law_guest("def shadowed : (decrypt : Size) -> Size := fun decrypt => decrypt", NULL);
+  /* Path checks its carrier before quoting it under an interval binder.
+     Law-only uses in that carrier must survive this conversion too. */
+  ok &= law_guest("def erasedCarrier : (c : Enc Size) -> "
+                  "Path ((fun (_ : Size) => Size) (decrypt Size c)) sz0 sz0 -> Size := fun c p => sz0", "REFUSE_LAW");
+  ok &= law_guest("def carrierAnn : Enc Size -> Size := fun c =>\n"
+                  "  (fun (p : Path ((fun (_ : Size) => Size) (encOf c)) sz0 sz0) => sz0) refl", "REFUSE_LAW");
+  ok &= law_guest("def checkedCarrier : Size :=\n"
+                  "  (fun (f : Path Size sz0 sz0 -> Size) => sz0)\n"
+                  "    (fun (p : Path ((fun (_ : Size) => Size) (decrypt Size (encEta Size sz0))) sz0 sz0) => sz0)", "REFUSE_LAW");
+  ok &= law_guest("def lawBody : (c : Enc Size) -> Path Size sz0 sz0 :=\n"
+                  "  fun c => fun (i : I) => (fun (x : Size) => sz0) (decrypt Size c)\n"
+                  "def carrierRelay : (c : Enc Size) -> "
+                  "Path ((fun (_ : Size) => Size) (lawBody c @ i0)) sz0 sz0 -> Size := fun c p => sz0", "REFUSE_LAW");
+  ok &= law_guest("def truncatedCarrier : (c : Enc Size) -> "
+                  "Trunc1 (Path ((fun (_ : Size) => Size) (decrypt Size c)) sz0 sz0) -> Size := fun c p => sz0", NULL);
   /* The generated names are R4 names: a bisimulation name, a destructor
      name and a corecursor name that an earlier def holds are refused. */
   ok &= domain("def StrmBisim : Type 1 := Type 0\n"

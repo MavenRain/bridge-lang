@@ -369,7 +369,7 @@ The ring size bounds the gas of `claim` (O17).
 | S4 | `Trace` as the free category CM in a slice; the category laws; the meaning functor; `Stream` of batches (CC) | DONE (2026-10-23), s1 the port of intent-lang 4b36026 (O44 to O47), s2 Part 2 in the kit example `examples/trace.lang` (Q-S4-1 (a), Q-S4-3 (a), Q-S4-4 (a)): examples 49, parse refusals 19, check refusals 177, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 260, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s2 has no src change and no domain change (O48 to O52) |
 | S5 | Part P: `Pos`, `Pool k`, `swapIn`, `swapOut`, the least-solution law, `addLiq`, `removeLiq`, the overflow bound | DONE (2026-10-22): examples 42, parse refusals 19, check refusals 171, pool refusals 4, kit-only refusals 22, evals 180, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S6 | Part B: credit, `InFlight`, `deposit`, `seal`, `accept`, `claim` on the guest side; conservation; `ua e` transport | DONE (2026-10-22): examples 43, parse refusals 19, check refusals 171, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 199, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
-| S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | s1 DONE (2026-10-23), the guest side (Q-S7-1 (a)): examples 46, parse refusals 19, check refusals 174, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 217, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the host and precompile rows wait for intent-lang S5 and S6 (O33) |
+| S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | s1 DONE (2026-10-23), the guest side (Q-S7-1 (a)): examples 46, parse refusals 19, check refusals 174, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 217, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the host and precompile rows wait for intent-lang S5 and S6 (O33); s2 DONE (2026-10-23), the port of intent-lang 1b65dec (the sealed `Enc`, the law-only `decrypt` and the host ElGamal) and the Q-S3-2 (a) item (O53 to O58, Q-S7-3 (a)): examples 50, parse refusals 19, check refusals 185, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 267, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the precompile rows wait for the port of intent-lang S6 9b99528 (O33) |
 | S8 | `ZKBridge` as the mapping cylinder; `ZKBridge ≃ BridgeState`; bLSAG claim rings and key images | DONE (2026-10-23), the guest side (Q-S8-1 (a) to Q-S8-4 (a)): examples 47, parse refusals 19, check refusals 175, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 237, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; no src change and no domain change (O38 to O43) |
 | S9 | Part D: encrypted ballots, `tallyEnc`, the tally law, liquidity Decisions, the remote enactment | PLANNED |
 | S10 | The contract of section 7: writer, two-deployment differential, gas and size rows | PLANNED |
@@ -703,6 +703,77 @@ The ring size bounds the gas of `claim` (O17).
   (100, 83) at (1100, 910), producing (1200, 993). There are now 18
   trace evals and 260 evals overall.
 
+- O53: S7 s2 is the port of intent-lang 1b65dec (the USER commit on
+  4b36026, "Add the sealed Enc monad, law-only decrypt and host ElGamal
+  (S5)", Q-S4-2 (a)). The patch is `git diff 4b36026 1b65dec` of
+  intent-lang without `docs/PLAN.md` and `docs/STATUS.md`, with each
+  `intent-lang` changed to `bridge-lang`. `git apply --reject` applies
+  each hunk except the 4 lists (`examples/kit.txt`,
+  `test/check/expect.txt`, `test/check/kit.txt` and
+  `test/eval/expect.txt`: the rows are at the end, O44) and the
+  `check_family` hunk of `src/front/check.c`. The local merge:
+  bridge-lang calls `cell_header` a second time after the universe
+  loop, and `has_type_param` takes the machine, so the sealed check
+  comes after the `cell_generators` line with
+  `has_type_param(m, &m->families[first])`. The new list rows come
+  after the local rows. The lexer adds the keywords `sealed` and `law`.
+  No guest identifier has these names (only comments and the file name
+  `u256-law.lang`). The host names `g1_neg` and `g1_eq` of
+  `src/front/elgamal.c` do not clash with `src/front/bn254.h` or
+  `src/front/blsag.h`. intent-lang S6 is 9b99528 (on 1b65dec, "Add
+  threshold opening with private dealer entropy (S6)"). S7 s2 ports
+  nothing from it.
+- O54: "rule O7" in `SPEC.md`, `domain/domain.lang`,
+  `src/front/check.c` and the ported examples is the intent-lang seal
+  rule (intent-lang SPEC rule O7), not the bridge-lang O7 (the reserves
+  bound). The text stays as in intent-lang, as `domain/domain.lang`
+  keeps the foreign "(O23)".
+- O55: the merge of `examples/enc.lang`. The intent-lang content comes
+  first with no change, then the bridge-lang guest defs `etaLaw`,
+  `bindLaw`, `privacyA`, `fheHom`, `two` and `bindAt`. The local defs
+  of `Enc`, `encEta`, `decrypt`, `encBind` and `observe` are removed:
+  the domain has them. This closes the gap of O34: `Enc` is sealed and
+  `decrypt` is law-only. In S7 s1, `bindLaw` was refl on the alias. On
+  the sealed `Enc`, refl fails at a neutral `c`, so `bindLaw` is now
+  the `elim` proof of the intent-lang `lawBind` at each A. The law is
+  not weaker. The intent-lang `privacy` (at `Size`) keeps its name, and
+  the local generic `privacy` is now `privacyA`. The `bindAt` value is
+  `encEta Size (szS (szS (szS sz0)))` (it was `pair unit ...`).
+  `test/check/enc-guest-family.lang` stays `REFUSE_DATA`, because
+  `check_decl` refuses a program family before the name check. Only its
+  comment changes.
+- O56: Q-S7-3 (a) is taken (the law-only migration). With the port, the
+  guest `open` of S7 s1 is refused: `langc: REFUSE_LAW: open: open uses
+  a law-only name (decrypt, observe, an elim, fold or projection of a
+  sealed family) but its type is not a law (a Path or Trunc1 codomain);
+  rule O7`. `open`, `decEta` and `openAt` open a ciphertext and return
+  A or `Size`. `Quorum` and `openLaw` need `open`. These five defs move
+  to the kit example `examples/enc-ideal.lang` (the trusted scope, as
+  the intent-lang `openSum`). `two` is in the two files, because
+  `bindAt` stays in the guest. The eval rows are now `enc-ideal decEta`
+  and `enc-ideal openAt`, with the same values. No law is weaker. The
+  port of intent-lang S6 replaces the kit `Quorum` and `open` with the
+  domain `family Quorum` and `law def open` (a name clash to resolve in
+  that port).
+- O57: Q-S3-2 (a). The 7 intent-lang aacc8ad fronttool cases are in
+  `test/fronttool.c` after the `prove_output` rows. The constant-line
+  `transp` rule at `ZkBallot` (intent-lang 32c1d13, `transp_data` in
+  `src/front/eval.c`) replaces the `break` of `case OP_ZK_BALLOT`:
+  when the two ends of the line convert, `transp` returns the base. It
+  is the only src change outside the port. The fifth case (`constant`,
+  by refl) passes with it. The S7 s2 survey found `PATH_END` for that
+  case without the rule. The build did not run it again without the
+  rule. The 18 new fronttool rows (11 of 1b65dec and the 7 cases) pass
+  ("domain regressions: passed"). The 8 rows of the new
+  `test/elgamaltool.c` pass ("elgamal regressions: passed").
+- O58: the builder calls of S7 s2. There is no builder call: the main
+  loop built S7 s2 by hand (USER ruling 10-05, as in O42, O47 and O50).
+  The first session made the map and stopped at the context limit with
+  a clean tree. A second session did the build and the record. The map
+  expected 23 kit-only refusals. The real count is 22: `enc-state.lang`
+  is a `REFUSE_STATE` row checked with `--kit` (`test/check/kit.txt`),
+  not a `REFUSE_KIT` row.
+
 ## 11. Questions for the USER (S1)
 
 All ten are RULED (S1, 2026-10-22; the quote is in section 1).
@@ -928,3 +999,22 @@ Q-S3-2, Q-S5-1, Q-S5-2, Q-S6-1, Q-S6-2, Q-S6-3 and Q-S7-2 (a).
 Q-S4-1 (a), Q-S4-3 (a) and Q-S4-4 (a) are taken. The USER RULED all
 four S4 questions (a) (2026-10-23, O51). Q-S4-2 (a) makes S7 s2 (the
 port of intent-lang 1b65dec) the next slice. No question is OPEN.
+
+### S7 s2 questions (OPEN)
+
+- Q-S7-3 (the guest `open` after the port). The sealed `Enc` makes the
+  S7 s1 guest `open`, `openLaw`, `decEta` and `openAt` law-only, and
+  `open`, `decEta` and `openAt` have no law type (`REFUSE_LAW`, O56).
+  (a) move `Quorum`, `open`, `openLaw`, `decEta` and `openAt` (with a
+  copy of `two`) to the kit example `examples/enc-ideal.lang` (the
+  trusted scope, as the intent-lang `enc-ideal.lang`); the eval rows
+  become `enc-ideal decEta` and `enc-ideal openAt`; no src change and
+  no domain change; the port of intent-lang S6 later replaces the kit
+  `Quorum` and `open` with the domain `family Quorum` and `law def
+  open`. RECOMMENDED, taken (O56). (b) port the two domain lines of
+  intent-lang S6 now and remove the local `Quorum` and `open` (a domain
+  change before the S6 port). (c) the guest `open` returns `Trunc1 A`
+  (`observe`), and `openLaw` is a Path in `Trunc1 A`. This changes the
+  meaning of `open`.
+
+Q-S7-3 (a) is taken. Q-S7-3 waits for the USER ruling.

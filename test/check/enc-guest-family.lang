@@ -1,4 +1,4 @@
 -- The hiding monad Enc as a guest family is refused (S7, rule R1): only domain/domain.lang declares a family.
--- examples/enc.lang uses the alias Prod Unit A in its place (Q-S7-2 (a), gap O34).
+-- The domain declares the sealed Enc (S7 s2, rule O7). check_decl refuses a program family before the name check, so the code stays REFUSE_DATA.
 family Enc (A : Type 0) := encEta (encOf : A)
 def decrypt : (A : Type 0) -> Enc A -> A := fun (A : Type 0) (c : Enc A) => fold (fun (a : A) => a) c

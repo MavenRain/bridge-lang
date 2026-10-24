@@ -526,7 +526,7 @@ static int path_ends(Checker *c, const Value *e, const Value *v0, const Value *v
 
 static const Core *elab(Checker *c, const Term *t, const Value *hint, const Value **type);
 static const Core *check_lam(Checker *c, const Term *t, const Value *hint, const Value **type);
-static int annotation_ok(Checker *c, const Term *ann, const Value *dom);
+static const Core *checked_annotation(Checker *c, const Term *ann, const Value *dom);
 
 static const Core *check(Checker *c, const Term *t, const Value *want) {
   const Value *type = NULL;
@@ -697,7 +697,8 @@ static const Core *rule_pathp(Call *k) {
   return core_ends(c, CORE_PATHP, k->args[0]->name, NULL, line, a, b);
 }
 
-/* Path A a b is PathP (fun _ => A) a b. */
+/* Path A a b is PathP (fun _ => A) a b. Retain the checked carrier in
+   CORE_PATHP.a for law-use checks before quoting it under the interval. */
 static const Core *rule_path(Call *k) {
   Checker *c = k->c;
   uint64_t level = 0;
@@ -706,7 +707,7 @@ static const Core *rule_path(Call *k) {
   const Core *a = check(c, k->args[1], tv);
   const Core *b = a == NULL ? NULL : check(c, k->args[2], tv);
   k->type = val_univ(c->m, level);
-  return core_ends(c, CORE_PATHP, "_", NULL, b == NULL ? NULL : quote_value(c->m, c->level + 1u, tv), a, b);
+  return core_ends(c, CORE_PATHP, "_", t, b == NULL ? NULL : quote_value(c->m, c->level + 1u, tv), a, b);
 }
 
 static const Core *rule_pair(Call *k) {
@@ -896,13 +897,14 @@ static const Core *bare_motive(Checker *c, const Term *t, const Value *st, const
   uint64_t level = 0;
   const Value *dom;
   const Core *domc;
+  const Core *ann = NULL;
   const Core *body;
   const Core *cod = NULL;
   *type = NULL;
   if (t->kind != TERM_LAM)
     return nul(FAIL(c, "TYPE_MISMATCH", "the motive of elim on %s needs one binder for each of its %u indices, then one for the value", f->name, (unsigned)f->index_count));
   dom = j < f->index_count ? eval_core(m, env_of(c, vals, p + j), f->index_types[j]) : val_op(m, VAL_OP, OP_FAMILY, st->inst, 0, vals, p + j);
-  if (t->left != NULL && !annotation_ok(c, t->left, dom))
+  if (t->left != NULL && (ann = checked_annotation(c, t->left, dom)) == NULL)
     return NULL;
   domc = quote_value(m, c->level, dom);
   if (domc == NULL || !push(c, t->name, dom))
@@ -914,7 +916,7 @@ static const Core *bare_motive(Checker *c, const Term *t, const Value *st, const
     cod = quote_value(m, c->level, val_univ(m, level));
   pop(c);
   *type = cod == NULL ? NULL : core_bind(c, CORE_PI, t->name, domc, cod);
-  return body == NULL || *type == NULL ? NULL : core_bind(c, CORE_LAM, t->name, NULL, body);
+  return body == NULL || *type == NULL ? NULL : core_bind(c, CORE_LAM, t->name, ann, body);
 }
 
 static const Core *elim_on_family(Call *k, const Core *motive, const Value *pt, const Value *st, uint32_t d);
@@ -2817,12 +2819,14 @@ static const Core *elab_spine(Checker *c, const Term *t, const Value *hint, cons
   return h.kind == HEAD_TERM ? apply_term(c, head, args, argc, hint, type) : apply_known(c, t, &h, args, argc, hint, type);
 }
 
-static int annotation_ok(Checker *c, const Term *ann, const Value *dom) {
+/* Retain the checked syntax before conversion erases law-only references. */
+static const Core *checked_annotation(Checker *c, const Term *ann, const Value *dom) {
   uint64_t level = 0;
-  const Value *v = here(c, check_type(c, ann, &level));
+  const Core *a = check_type(c, ann, &level);
+  const Value *v = here(c, a);
   if (v == NULL)
-    return 0;
-  return conv_values(c->m, c->level, v, dom) ? 1 : FAIL(c, "TYPE_MISMATCH", "the binder type %s differs from the expected type %s", show(c, v), show(c, dom));
+    return NULL;
+  return conv_values(c->m, c->level, v, dom) ? a : nul(FAIL(c, "TYPE_MISMATCH", "the binder type %s differs from the expected type %s", show(c, v), show(c, dom)));
 }
 
 /* A path abstraction against the path type HINT: the body at the interval
@@ -2896,12 +2900,13 @@ static const Core *check_fin_all(Checker *c, const Term *t, const Value *hint, u
 
 static const Core *check_lam(Checker *c, const Term *t, const Value *hint, const Value **type) {
   const Core *body;
+  const Core *ann = NULL;
   Diag clean;
   if (hint->kind == VAL_PATHP)
     return check_plam(c, t, hint, type);
   if (hint->kind != VAL_PI)
     return nul(FAIL(c, "TYPE_MISMATCH", "a function is not a term of type %s", show(c, hint)));
-  if (t->left != NULL && !annotation_ok(c, t->left, hint->dom))
+  if (t->left != NULL && (ann = checked_annotation(c, t->left, hint->dom)) == NULL)
     return NULL;
   clean = *c->m->diag;
   if (!push(c, t->name, hint->dom))
@@ -2915,7 +2920,7 @@ static const Core *check_lam(Checker *c, const Term *t, const Value *hint, const
     body = check_fin_all(c, t, hint, fin_cases(hint->dom));
   }
   *type = hint;
-  return core_bind(c, CORE_LAM, t->name, NULL, body);
+  return core_bind(c, CORE_LAM, t->name, ann, body);
 }
 
 static const Core *infer_lam(Checker *c, const Term *t, const Value **type) {
@@ -2924,18 +2929,20 @@ static const Core *infer_lam(Checker *c, const Term *t, const Value **type) {
   const Value *bt = NULL;
   const Core *body;
   const Core *quoted;
+  const Core *ann;
   if (t->left == NULL)
     return nul(FAIL(c, "TYPE_INFER", "fun %s => ... needs a binder type here", t->name));
   if (is_interval(c, t->left))
     return infer_plam(c, t, type);
-  dom = here(c, check_type(c, t->left, &level));
+  ann = check_type(c, t->left, &level);
+  dom = here(c, ann);
   if (!push(c, t->name, dom))
     return NULL;
   body = infer(c, t->right, &bt);
   quoted = body == NULL ? NULL : quote_value(c->m, c->level, bt);
   pop(c);
   *type = val_closure(c->m, VAL_PI, t->name, dom, c->env, quoted);
-  return core_bind(c, CORE_LAM, t->name, NULL, body);
+  return core_bind(c, CORE_LAM, t->name, ann, body);
 }
 
 /* (x : A) -> B and Sigma (x : A) B. */
@@ -3704,6 +3711,11 @@ static int check_family(Checker *c, const Decl *d) {
     return 0;
   if (count == 1u && has_type_param(m, &m->families[first]) && !cell_generators(c, d, first))
     return 0;
+  /* A sealed family is a cell monad (S5, rule O7). */
+  if (d->is_sealed && (count != 1u || !has_type_param(m, &m->families[first])))
+    return FAIL(c, "REFUSE_CELL", "%s is sealed but is not a cell monad: a sealed family has a type parameter and no and block (rule O7)", d->name);
+  for (s = 0; s < count; s++)
+    m->families[first + s].sealed = d[s].is_sealed;
   return d->origin != ORIGIN_PROGRAM && count == 1u && strcmp(d->name, "Out") == 0 ? check_events(c, first) : 1;
 }
 
@@ -4009,20 +4021,91 @@ static int kernel_sig(Checker *c, const Decl *d) {
   return 1;
 }
 
+static uint32_t find_family(const Machine *m, const char *name);
+
+/* Rule O7 (S5, Q-S5-2 (a)). 1 if the core term T uses a law-only name: a
+   law-only def, or an elim, a fold or a projection of a sealed family. The
+   arguments of the type former TRUNC (Trunc1) are skipped: an end point
+   under Trunc1 comes out only into a proposition. */
+static int law_uses(const Machine *m, uint32_t trunc, const Core *t) {
+  uint32_t i;
+  if (t == NULL)
+    return 0;
+  switch (t->kind) {
+  case CORE_VAR:
+  case CORE_NAT:
+  case CORE_WORD:
+  case CORE_TRAP:
+  case CORE_UNIV:
+  case CORE_IZERO:
+  case CORE_IONE:
+    return 0;
+  case CORE_GLOBAL:
+    return m->defs[t->index].law_only;
+  case CORE_LAM:
+  case CORE_PI:
+  case CORE_SIGMA:
+  case CORE_APP:
+  case CORE_PLAM:
+  case CORE_INEG:
+  case CORE_IMEET:
+  case CORE_IJOIN:
+    return law_uses(m, trunc, t->a) || law_uses(m, trunc, t->b);
+  case CORE_PATHP:
+  case CORE_PAPP:
+    return law_uses(m, trunc, t->a) || law_uses(m, trunc, t->b) || law_uses(m, trunc, t->args[0]) || law_uses(m, trunc, t->args[1]);
+  case CORE_OP:
+    break;
+  }
+  if (t->op == OP_FAMILY && t->inst == trunc)
+    return 0;
+  /* OP_ELIM keeps the family + 1 in FIELD (0 for Sum and Unit). */
+  if ((t->op == OP_FOLD_FAMILY && m->families[t->inst].sealed) || (t->op == OP_ELIM && t->field != 0u && m->families[t->field - 1u].sealed) || (t->op == OP_PROJ && m->families[m->ctors[t->inst].family].sealed))
+    return 1;
+  for (i = 0; i < t->argc; i++) {
+    if (law_uses(m, trunc, t->args[i]))
+      return 1;
+  }
+  return 0;
+}
+
+/* Rule O7: a law type is, after the Pis (the loop of entry_of), a Path type
+   or Trunc1 X. */
+static int law_type(Machine *m, uint32_t level, uint32_t trunc, const Value *t) {
+  uint32_t n = level;
+  while (t != NULL && t->kind == VAL_PI)
+    t = closure_apply(m, t, val_var(m, n++));
+  return t != NULL && (t->kind == VAL_PATHP || is_family(t, trunc));
+}
+
 /* Register a checked body, including the closed label cores retained by
    cocell_shape. Both callers obtain BODY from the term checker. */
-static int check_def_body(Checker *c, const Decl *d, const Value *tv, const Core *body) {
+static int check_def_body(Checker *c, const Decl *d, const Value *tv, const Core *syntax_type, const Core *body) {
   Machine *m = c->m;
   DefInfo *info = &m->defs[m->def_count];
+  uint32_t trunc = find_family(m, "Trunc1");
+  int program = d->origin == ORIGIN_PROGRAM;
+  const Core *tc;
+  int law;
   if (body == NULL || !check_sig(c, d, tv))
     return 0;
   if (has_history(m) && strcmp(d->name, "init") != 0 && !is_family(tv, m->state_family) && !history_ok(c, body, mentions_state(m, c->level, tv)))
     return 0;
+  /* Rule O7 (S5): the domain marks its law defs; a program def is law-only
+     when its type or its body uses a law-only name. Kit mode sets the flag
+     but does not refuse. */
+  tc = program ? quote_value(m, c->level, tv) : NULL;
+  if (program && tc == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  law = program ? law_uses(m, trunc, syntax_type) || law_uses(m, trunc, tc) || law_uses(m, trunc, body) : d->is_law;
+  if (law && guest(c) && !law_type(m, c->level, trunc, tv))
+    return FAIL(c, "REFUSE_LAW", "%s uses a law-only name (decrypt, observe, an elim, fold or projection of a sealed family) but its type is not a law (a Path or Trunc1 codomain); rule O7", d->name);
   info->name = d->name;
   info->origin = d->origin;
   info->body = body;
   info->type = tv;
   info->value = NULL;
+  info->law_only = law;
   m->def_count++;
   return 1;
 }
@@ -4032,7 +4115,7 @@ static int check_def(Checker *c, const Decl *d) {
   const Core *t = check_type(c, d->type, &level);
   const Value *tv = here(c, t);
   const Core *body = check(c, d->body, tv);
-  return check_def_body(c, d, tv, body);
+  return check_def_body(c, d, tv, t, body);
 }
 
 /* First order (slice K3a): Nat, Flag, U256, Addr, and Option, Prod and List
@@ -4424,7 +4507,7 @@ static int check_label(Checker *c, const Decl *d, const Field *field, uint64_t k
   e->name = name;
   e->block_count = 1u;
   checker_reset(c, c->decl_index, name);
-  return name_free(c, name) && check_def_body(c, e, val_univ(c->m, k), body);
+  return name_free(c, name) && check_def_body(c, e, val_univ(c->m, k), NULL, body);
 }
 
 /* A cofamily (S4, rule R1): the shape check, then the label types, then
@@ -4477,6 +4560,8 @@ static int check_decl(Checker *c, const Decl *d) {
     return FAIL(c, "REFUSE_DATA", "a program cannot declare a family (rule R1); only domain/domain.lang can");
   if (d->kind == DECL_COFAMILY && d->origin == ORIGIN_PROGRAM)
     return FAIL(c, "REFUSE_DATA", "a program cannot declare a cofamily (rule R1); only domain/domain.lang can");
+  if (d->is_law && d->origin == ORIGIN_PROGRAM)
+    return FAIL(c, "REFUSE_DATA", "a program cannot declare a law def (rule O7); only domain/domain.lang can");
   if (d->kind == DECL_AXIOM)
     return FAIL(c, "REFUSE_AXIOM", "an axiom has no proof (rule R2)");
   if (d->is_rec)

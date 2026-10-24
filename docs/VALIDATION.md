@@ -252,6 +252,38 @@ rows fail before this fix and pass after it; one also proves a labelled
 destructor computation by refl. Two further rows check mixed label universes
 and refusal of a label that still depends on an earlier observation.
 
+The S5 sealed Enc monad (rule O7) adds the law-only walk and REFUSE_LAW
+(src/front/check.c), the host ElGamal (src/front/elgamal.c), 2 examples,
+7 eval rows, 8 check refusals, 11 fronttool rows and 8 elgamaltool rows.
+Mutants k1 (the seal off), k1b (the projection taint off), k2 (no
+propagation through guest law-only defs), k3 (no Trunc1 exemption), k4
+(any codomain is a law), k5 (one more giant step) and k6 (decrypt
+computes C2 + sk C1) are killed (7 of 7). enc-fold.lang kills k1 and k4,
+enc-proj.lang kills k1b, examples/enc.lang kills k3 (settle refused),
+enc-decrypt.lang kills k4, the not-found row kills k5 and the round trip
+rows kill k6. k2 survived enc-leak.lang: the body of `leak` holds the
+quoted ends of the Path type of leakLaw, which contain decrypt. The new
+row enc-relay.lang (a law-only def with its taint in its body only and
+clean Path ends, then a relay of it) kills k2 (got ok, want REFUSE_LAW).
+
+The S5 review adds six C fronttool rows. Four refusal rows were accepted
+before the fix: a law reference in an unused inferred binder annotation,
+a declared type whose decrypt application normalizes away, a declared
+type whose guest law-only reference normalizes away, and an unused
+checked binder annotation. The checker now retains checked declared types
+and explicit binder annotations alongside the normalized type and body.
+All four give REFUSE_LAW after the fix. The other two rows still accept
+an annotation with decrypt under Trunc1 and a local binder named decrypt.
+These cases verify the stated taint rule; the erased uses in the refusal
+rows do not establish an additional plaintext extraction path.
+
+The BSGS decrypt does one affine g1_add (one field inverse) for each step,
+about 5.6 ms. Worst case m = 2^bits - 1, `time build/elgamaltool BITS M`:
+bits 24 (8192 steps) 42.4 s user, bits 28 (32768 steps) 183.8 s user.
+The 2^20-step search (bits 40, 2^21 steps) was not run; the extrapolation
+is 64 x 183.8 s, about 11,800 s (3.3 h). Its table is 2^21 slots of 8
+bytes (16 MB). A Jacobian walk with a batch inverse can make it faster.
+
 ## Ring sizes and gas of the written contract (S9 B3)
 
 `test/contract/ringN.lang` is a guest program with every DAO slot, N

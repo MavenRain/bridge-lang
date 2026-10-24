@@ -1,46 +1,56 @@
--- The hiding monad Enc as guest code (slice S7, Q-S7-2 (a)). A program cannot
--- declare a family (rule R1, REFUSE_DATA: test/check/enc-guest-family.lang), so
--- Enc A is the alias Prod Unit A: the Unit slot stands for the key material,
--- encEta is the pair, decrypt is the projection. A seal (no projection on Enc
--- in a program; decrypt law-only) is a recorded gap (O34) until the intent-lang
--- S5 port. The points are Size values: a guest program has no Nat literal.
-def Enc : Type 0 -> Type 0 := fun (A : Type 0) => Prod Unit A
+-- The sealed Enc monad (S5, rule O7). Enc is the identity cell monad with a
+-- sealed eliminator: a guest def that uses decrypt, observe or an elim,
+-- fold or projection of Enc is law-only and needs a law type (a Path or a
+-- Trunc1 codomain). The laws below are law-only and have Path codomains.
+-- privacy is the squash1 path of observe. settle names decrypt only under
+-- Trunc1 in a Pi domain, so it is not law-only and returns a Size. The
+-- encBind, encMap and encOp2 values never open a ciphertext.
+-- The S7 s1 alias Enc A := Prod Unit A (Q-S7-2 (a), gap O34) is gone: the
+-- domain declares the sealed family. The bridge-lang defs after encFour are
+-- the generic laws etaLaw, bindLaw and privacyA, the step fheHom and the
+-- value bindAt. open, decEta and openAt open a ciphertext and return A or
+-- Size, so a guest program refuses them (REFUSE_LAW). Quorum and openLaw go
+-- with open to the kit example enc-ideal.lang (Q-S7-3 (a)).
+def sizeAdd : Size -> Size -> Size :=
+  fun (n : Size) (m : Size) => fold m (fun (r : Size) => szS r) n
+def lawEta : (a : Size) -> Path Size (decrypt Size (encEta Size a)) a :=
+  fun (a : Size) => refl
+def lawBind : (c : Enc Size) -> (f : Size -> Enc Size) ->
+  Path Size (decrypt Size (encBind Size Size c f)) (decrypt Size (f (decrypt Size c))) :=
+  fun (c : Enc Size) (f : Size -> Enc Size) =>
+  elim (fun (d : Enc Size) => Path Size (decrypt Size (encBind Size Size d f)) (decrypt Size (f (decrypt Size d)))) (fun (a : Size) => refl) c
+def lawOp2 : (c1 : Enc Size) -> (c2 : Enc Size) ->
+  Path Size (decrypt Size (encOp2 Size Size Size sizeAdd c1 c2)) (sizeAdd (decrypt Size c1) (decrypt Size c2)) :=
+  fun (c1 : Enc Size) (c2 : Enc Size) =>
+  elim (fun (d1 : Enc Size) => Path Size (decrypt Size (encOp2 Size Size Size sizeAdd d1 c2)) (sizeAdd (decrypt Size d1) (decrypt Size c2)))
+    (fun (a : Size) => elim (fun (d2 : Enc Size) => Path Size (decrypt Size (encOp2 Size Size Size sizeAdd (encEta Size a) d2)) (sizeAdd a (decrypt Size d2)))
+      (fun (b : Size) => refl) c2) c1
+def privacy : (c : Enc Size) -> (d : Enc Size) -> Path (Trunc1 Size) (observe Size c) (observe Size d) :=
+  fun (c : Enc Size) (d : Enc Size) => fun (i : I) => squash1 Size (observe Size c) (observe Size d) i
+def settle : (c : Enc Size) -> Trunc1 (Path Size (decrypt Size c) (szS sz0)) -> Size :=
+  fun (c : Enc Size) (p : Trunc1 (Path Size (decrypt Size c) (szS sz0))) => szS sz0
+def encOne : Enc Size := encEta Size (szS sz0)
+def encTwo : Enc Size := encMap Size Size (fun (s : Size) => szS s) encOne
+def encSum : Enc Size := encOp2 Size Size Size sizeAdd encOne encTwo
+def encDouble : Enc Size -> Enc Size :=
+  fun (c : Enc Size) => encBind Size Size c (fun (a : Size) => encEta Size (sizeAdd a a))
+def encFour : Enc Size := encDouble encTwo
 
-def encEta : (A : Type 0) -> A -> Enc A :=
-  fun (A : Type 0) (a : A) => pair unit a
--- decrypt is the projection to A.
-def decrypt : (A : Type 0) -> Enc A -> A :=
-  fun (A : Type 0) (c : Enc A) => second c
--- encBind applies f to the decrypted value.
-def encBind : (A : Type 0) -> (B : Type 0) -> Enc A -> (A -> Enc B) -> Enc B :=
-  fun (A : Type 0) (B : Type 0) (c : Enc A) (f : A -> Enc B) => f (decrypt A c)
-
--- A quorum is one witness: open is decrypt under the quorum.
-def Quorum : Type 0 := Unit
-def open : (A : Type 0) -> Quorum -> Enc A -> A :=
-  fun (A : Type 0) (q : Quorum) (c : Enc A) => decrypt A c
--- observe gives the truncated value: all observations are equal.
-def observe : (A : Type 0) -> Enc A -> Trunc1 A :=
-  fun (A : Type 0) (c : Enc A) => trunc1 A (decrypt A c)
-
--- The monad laws of intent-lang PLAN 3.4, by refl at open values: both sides
--- compute to the same term by the projection of a pair.
+-- The monad laws of intent-lang PLAN 3.4 at each type A (S7 s1). decrypt of
+-- encEta reduces by the fold, so etaLaw is refl. refl fails on a neutral c,
+-- so bindLaw is the elim proof of lawBind at A.
 def etaLaw : (A : Type 0) -> (a : A) -> Path A (decrypt A (encEta A a)) a :=
   fun (A : Type 0) (a : A) => refl
 def bindLaw : (A : Type 0) -> (B : Type 0) -> (c : Enc A) -> (f : A -> Enc B) ->
     Path B (decrypt B (encBind A B c f)) (decrypt B (f (decrypt A c))) :=
-  fun (A : Type 0) (B : Type 0) (c : Enc A) (f : A -> Enc B) => refl
--- open under a quorum is decrypt.
-def openLaw : (A : Type 0) -> (q : Quorum) -> (c : Enc A) -> Path A (open A q c) (decrypt A c) :=
-  fun (A : Type 0) (q : Quorum) (c : Enc A) => refl
--- Privacy: two observations are equal in Trunc1 A by squash1.
-def privacy : (A : Type 0) -> (c : Enc A) -> (d : Enc A) -> Path (Trunc1 A) (observe A c) (observe A d) :=
+  fun (A : Type 0) (B : Type 0) (c : Enc A) (f : A -> Enc B) =>
+  elim (fun (d : Enc A) => Path B (decrypt B (encBind A B d f)) (decrypt B (f (decrypt A d)))) (fun (a : A) => refl) c
+-- Privacy at each type A: two observations are equal in Trunc1 A by squash1.
+def privacyA : (A : Type 0) -> (c : Enc A) -> (d : Enc A) -> Path (Trunc1 A) (observe A c) (observe A d) :=
   fun (A : Type 0) (c : Enc A) (d : Enc A) => fun (i : I) => squash1 A (observe A c) (observe A d) i
 -- A homomorphic step at a closed value: bind of eta 0 by the successor is eta 1.
 def fheHom : Path (Enc Size) (encBind Size Size (encEta Size sz0) (fun (s : Size) => encEta Size (szS s))) (encEta Size (szS sz0)) := refl
 
 -- Entries for `langc eval`.
 def two : Size := szS (szS sz0)
-def decEta : Size := decrypt Size (encEta Size two)
 def bindAt : Enc Size := encBind Size Size (encEta Size two) (fun (s : Size) => encEta Size (szS s))
-def openAt : Size := open Size unit (encEta Size (szS two))

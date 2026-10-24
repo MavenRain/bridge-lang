@@ -30,6 +30,8 @@ static const struct {
   {"event", TOK_KW_EVENT},
   {"and", TOK_KW_AND},
   {"cofamily", TOK_KW_COFAMILY},
+  {"sealed", TOK_KW_SEALED},
+  {"law", TOK_KW_LAW},
 };
 
 const char *tok_kind_name(TokKind kind) {
@@ -64,6 +66,8 @@ const char *tok_kind_name(TokKind kind) {
     case TOK_KW_EVENT: return "'event'";
     case TOK_KW_AND: return "'and'";
     case TOK_KW_COFAMILY: return "'cofamily'";
+    case TOK_KW_SEALED: return "'sealed'";
+    case TOK_KW_LAW: return "'law'";
   }
   return "a token";
 }

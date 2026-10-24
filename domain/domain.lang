@@ -126,6 +126,25 @@ def fmBind : (A : Type 0) -> (B : Type 0) -> (A -> FreeMon B) -> FreeMon A -> Fr
     (fun (x : FreeMon B) => fun (i : I) => fmUnitR B x i) k
 def fmMap : (A : Type 0) -> (B : Type 0) -> (A -> B) -> FreeMon A -> FreeMon B :=
   fun (A : Type 0) (B : Type 0) (f : A -> B) => fmBind A B (fun (a : A) => fmEta B (f a))
+-- The encrypted values (S5, USER rulings Q3 (a) and Q-S5-1 .. Q-S5-3 (a),
+-- rule O7): the identity cell monad with a sealed eliminator. A guest elim,
+-- fold or projection of Enc, or a use of a law def (decrypt, observe),
+-- outside a Trunc1 argument makes a guest def law-only, and a law-only
+-- guest def must have a law type (a Path or Trunc1 codomain), else
+-- REFUSE_LAW. encBind is the fold, encMap and encOp2 are binds (the op*
+-- homomorphisms), decrypt is the counit, observe is decrypt under Trunc1.
+sealed family Enc (A : Type 0) := encEta (encOf : A)
+def encBind : (A : Type 0) -> (B : Type 0) -> Enc A -> (A -> Enc B) -> Enc B :=
+  fun (A : Type 0) (B : Type 0) (c : Enc A) (f : A -> Enc B) => fold (fun (a : A) => f a) c
+def encMap : (A : Type 0) -> (B : Type 0) -> (A -> B) -> Enc A -> Enc B :=
+  fun (A : Type 0) (B : Type 0) (f : A -> B) (c : Enc A) => encBind A B c (fun (a : A) => encEta B (f a))
+def encOp2 : (A : Type 0) -> (B : Type 0) -> (C : Type 0) -> (A -> B -> C) -> Enc A -> Enc B -> Enc C :=
+  fun (A : Type 0) (B : Type 0) (C : Type 0) (op : A -> B -> C) (c1 : Enc A) (c2 : Enc B) =>
+  encBind A C c1 (fun (a : A) => encBind B C c2 (fun (b : B) => encEta C (op a b)))
+law def decrypt : (A : Type 0) -> Enc A -> A :=
+  fun (A : Type 0) (c : Enc A) => fold (fun (a : A) => a) c
+law def observe : (A : Type 0) -> Enc A -> Trunc1 A :=
+  fun (A : Type 0) (c : Enc A) => trunc1 A (decrypt A c)
 -- The positions of a bag (S7 B3, Q4): Pos n has n values, the first
 -- position at each szS and a lift of each position of the tail. No
 -- constructor gives Pos sz0. A domain family, so Fin stays internal (O23).

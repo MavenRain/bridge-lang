@@ -124,7 +124,7 @@ typedef enum {
   CORE_WORD,   /* word; nat is WORD_U256 or WORD_ADDR */
   CORE_TRAP,   /* an overflow or a division by 0; only quote writes it */
   CORE_UNIV,   /* Type nat */
-  CORE_LAM,    /* fun name => b */
+  CORE_LAM,    /* fun name => b; a retains an explicit annotation for checks */
   CORE_PI,     /* (name : a) -> b */
   CORE_SIGMA,  /* Sigma (name : a) b */
   CORE_APP,    /* a b */
@@ -311,6 +311,8 @@ typedef struct {
      block_count. A family outside a block is a block of one. */
   uint32_t block_first;
   uint32_t block_count;
+  /* A sealed family (S5, rule O7): a guest elim or fold of it is law-only. */
+  int sealed;
 } FamilyInfo;
 
 typedef struct {
@@ -319,6 +321,9 @@ typedef struct {
   const Core *body;
   const Value *type;
   const Value *value; /* computed when first used */
+  /* A law-only def (S5, rule O7): a `law def` of the domain, or a guest def
+     that uses one outside a Trunc1 argument. */
+  int law_only;
 } DefInfo;
 
 /* The checked program and the evaluation state. No global state: every

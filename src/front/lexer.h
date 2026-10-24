@@ -35,7 +35,9 @@ typedef enum {
   TOK_KW_STATE,
   TOK_KW_EVENT,
   TOK_KW_AND,
-  TOK_KW_COFAMILY
+  TOK_KW_COFAMILY,
+  TOK_KW_SEALED, /* domain-only modifier of a family (S5) */
+  TOK_KW_LAW     /* domain-only modifier of a def (S5) */
 } TokKind;
 
 typedef struct {
