@@ -1,0 +1,191 @@
+-- The remote enactment of a liquidity Decision (S9 s2, PLAN 4.3, 7, Q8). The
+-- tally of examples/tally.lang gives a Decision on the home side 0. The
+-- Decision word is keccak(keccak(tag, dx), dy) with the tag 0 for keep, 1 for
+-- addLiq and 2 for removeLiq. The home side runs enactW directly. The other
+-- side runs it only with an attest: a Schnorr signature over the side 0, the
+-- proposal number and the Decision word (attestOk in examples/elgamal.lang).
+-- A bad signature, another word or a replay at another proposal number keeps
+-- the pool. The returned state records each enacted proposal, so a replay at
+-- the same number also keeps the pool. Callers thread the returned state.
+-- The signatures are fixed test values of the key 7.
+-- A kit file is checked alone. So the pool defs up to removeLiq, k0, p0 and
+-- d100 are a copy of examples/pool.lang, and the Schnorr defs are a copy of
+-- examples/elgamal.lang.
+-- u256Add traps on an overflow. u256Sub stops at 0.
+
+def top : U256 := 0x8000000000000000000000000000000000000000000000000000000000000000u
+def wMax : U256 := 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffu
+def bound : U256 := 0xffffffffffffffffffffffffffffffffu
+
+-- The 256 powers of two, the smallest first. The step stops at 2^255, so no word overflows.
+def pows : List U256 := unfold (fun (p : U256) => some (pair p (flagIf (u256Eq p top) p (u256Add p p)))) 256 1u
+
+-- powsAt a b is pows when a and b are words. For an open a or b it does not reduce, so a fold over it
+-- stops at once. Without it, a type with an open product makes a normal form of exponential size.
+def powsAt : U256 -> U256 -> List U256 := fun (a b : U256) => flagIf (u256Eq a a) (flagIf (u256Eq b b) pows nil) nil
+
+-- zeroTrap d is 0. It traps when d is 0.
+def zeroTrap : U256 -> U256 := fun (d : U256) => u256Sub (u256Add wMax (flagIf (u256Eq d 0u) 1u 0u)) wMax
+
+-- mul a b reads the bits of b from the top (the fold starts at the last power). A product of 2^256 or more traps.
+def mulBit : (a p acc rest : U256) -> Prod U256 U256 := fun (a p acc rest : U256) =>
+  flagIf (u256Le p rest) (pair (u256Add (u256Add acc acc) a) (u256Sub rest p)) (pair (u256Add acc acc) rest)
+def mul : U256 -> U256 -> U256 := fun (a b : U256) =>
+  first (fold (fun (p : U256) (s : Prod U256 U256) => mulBit a p (first s) (second s)) (pair 0u b) (powsAt a b))
+
+-- divFloor n d is the long division of n by d. The state is the quotient, the rest and the bits of n not read.
+-- d must be below 2^255. A divisor of 0 traps.
+def divNext : (d p q rem rest : U256) -> Prod U256 (Prod U256 U256) := fun (d p q rem rest : U256) =>
+  flagIf (u256Le d rem) (pair (u256Add q p) (pair (u256Sub rem d) rest)) (pair q (pair rem rest))
+def divBit : (d p q rem rest : U256) -> Prod U256 (Prod U256 U256) := fun (d p q rem rest : U256) =>
+  flagIf (u256Le p rest) (divNext d p q (u256Add (u256Add rem rem) 1u) (u256Sub rest p)) (divNext d p q (u256Add rem rem) rest)
+def divFloor : U256 -> U256 -> U256 := fun (n d : U256) =>
+  u256Add (zeroTrap d) (first (fold (fun (p : U256) (s : Prod U256 (Prod U256 U256)) =>
+    divBit d p (first s) (first (second s)) (second (second s))) (pair 0u (pair 0u n)) (powsAt n d)))
+def divCeil : U256 -> U256 -> U256 := fun (n d : U256) =>
+  u256Add (divFloor n d) (flagIf (u256Eq (mul (divFloor n d) d) n) 0u 1u)
+
+-- The overflow bound (O7): capped r is r when r is below 2^128. Else it traps.
+def capped : U256 -> U256 := fun (r : U256) => flagIf (u256Le r bound) r (u256Add wMax r)
+
+-- Check the whole result before exposing either coordinate. A check inside just one
+-- field can be skipped by projecting the other field in the lazy evaluator.
+def badReserves : Prod U256 U256 := pair (u256Add wMax 1u) (u256Add wMax 1u)
+def checkedReserves : U256 -> U256 -> Prod U256 U256 := fun (x y : U256) =>
+  flagIf (u256Le 1u x) (flagIf (u256Le x bound)
+    (flagIf (u256Le 1u y) (flagIf (u256Le y bound) (pair x y) badReserves) badReserves) badReserves) badReserves
+
+-- The order as a proof, Positive (the Pos of PLAN 3.2, O20) and Pool k (PLAN 3.2, 4.2).
+def Le : U256 -> U256 -> Type 0 := fun (a b : U256) => Path Flag (u256Le a b) flagYes
+def Lt : U256 -> U256 -> Type 0 := fun (a b : U256) => Le (u256Add a 1u) b
+def Positive : Type 0 := (n : U256) * Le 1u n
+def Pool : U256 -> Type 0 := fun (k : U256) => (x : Positive) * (y : Positive) * Le k (mul (witness x) (witness y))
+def mkPool : (k x y : U256) -> Le 1u x -> Le 1u y -> Le k (mul x y) -> Pool k :=
+  fun (k x y : U256) (hx : Le 1u x) (hy : Le 1u y) (hk : Le k (mul x y)) => pack (pack x hx) (pack (pack y hy) hk)
+def resX : (k : U256) -> Pool k -> U256 := fun (k : U256) (p : Pool k) => witness (witness p)
+def resY : (k : U256) -> Pool k -> U256 := fun (k : U256) (p : Pool k) => witness (witness (payload p))
+
+-- The checker has no dependent Flag eliminator. Callers supply the arithmetic
+-- evidence explicitly; each public operation returns a pool carrying that evidence.
+def PoolLaw : U256 -> Prod U256 U256 -> Type 0 := fun (k : U256) (r : Prod U256 U256) =>
+  Prod (Le 1u (first r)) (Prod (Le 1u (second r)) (Le k (mul (first r) (second r))))
+def poolFromWords : (k : U256) -> (r : Prod U256 U256) -> PoolLaw k r -> Pool k :=
+  fun (k : U256) (r : Prod U256 U256) (h : PoolLaw k r) =>
+    mkPool k (first r) (second r) (first h) (first (second h)) (second (second h))
+def poolWords : (k : U256) -> Pool k -> Prod U256 U256 := fun (k : U256) (p : Pool k) => pair (resX k p) (resY k p)
+def reserveProduct : Prod U256 U256 -> U256 := fun (r : Prod U256 U256) => mul (first r) (second r)
+
+-- swapIn (PLAN 4.2): dx goes in, floor (y * dx / (x + dx)) goes out.
+def outIn : (x y dx : U256) -> U256 := fun (x y dx : U256) => divFloor (mul y dx) (u256Add x dx)
+def swapInW : (x y dx : U256) -> Prod U256 U256 := fun (x y dx : U256) => checkedReserves (u256Add x dx) (u256Sub y (outIn x y dx))
+def swapIn : (k : U256) -> (p : Pool k) -> (dx : Positive) -> PoolLaw k (swapInW (resX k p) (resY k p) (witness dx)) -> Pool k :=
+  fun (k : U256) (p : Pool k) (dx : Positive) (h : PoolLaw k (swapInW (resX k p) (resY k p) (witness dx))) =>
+    poolFromWords k (swapInW (resX k p) (resY k p) (witness dx)) h
+
+-- swapOut (PLAN 4.2): c goes out, ceil (x * c / (y - c)) goes in. The proof says c < y.
+def inOut : (x y c : U256) -> U256 := fun (x y c : U256) => divCeil (mul x c) (u256Sub y c)
+def swapOutW : (x y c : U256) -> Prod U256 U256 := fun (x y c : U256) => checkedReserves (u256Add x (inOut x y c)) (u256Sub y c)
+def swapOut : (k : U256) -> (p : Pool k) -> (c : U256) -> Lt c (resY k p) -> PoolLaw k (swapOutW (resX k p) (resY k p) c) -> Pool k :=
+  fun (k : U256) (p : Pool k) (c : U256) (h : Lt c (resY k p)) (hp : PoolLaw k (swapOutW (resX k p) (resY k p) c)) =>
+    poolFromWords k (swapOutW (resX k p) (resY k p) c) hp
+
+-- addLiq (PLAN 4.3): the price stays. dx * y = dy * x, rounded toward the pool: dx * y <= dy * x < dx * y + x.
+def PriceEq : (x y dx dy : U256) -> Type 0 := fun (x y dx dy : U256) =>
+  Prod (Le (mul dx y) (mul dy x)) (Lt (mul dy x) (u256Add (mul dx y) x))
+def addLiqW : (x y dx dy : U256) -> Prod U256 U256 := fun (x y dx dy : U256) => checkedReserves (u256Add x dx) (u256Add y dy)
+def addLiq : (k : U256) -> (p : Pool k) -> (dx dy : Positive) -> PriceEq (resX k p) (resY k p) (witness dx) (witness dy) -> PoolLaw k (addLiqW (resX k p) (resY k p) (witness dx) (witness dy)) -> Pool k :=
+  fun (k : U256) (p : Pool k) (dx dy : Positive) (h : PriceEq (resX k p) (resY k p) (witness dx) (witness dy)) (hp : PoolLaw k (addLiqW (resX k p) (resY k p) (witness dx) (witness dy))) =>
+    poolFromWords k (addLiqW (resX k p) (resY k p) (witness dx) (witness dy)) hp
+
+-- removeLiq (PLAN 4.3): dx and dy go to the DAO. dx < x, and
+-- dy * x <= dx * y < dy * x + x, so dy is floor (dx * y / x).
+-- The product goes down, so the result is a pool of a smaller k', a point of (k' : U256) * Pool k'.
+def Share : (x y dx dy : U256) -> Type 0 := fun (x y dx dy : U256) =>
+  Prod (Lt dx x) (Prod (Le (mul dy x) (mul dx y)) (Lt (mul dx y) (u256Add (mul dy x) x)))
+def removeLiqW : (x y dx dy : U256) -> Prod U256 U256 := fun (x y dx dy : U256) => checkedReserves (u256Sub x dx) (u256Sub y dy)
+def removeLiq : (k : U256) -> (p : Pool k) -> (dx dy : U256) -> Share (resX k p) (resY k p) dx dy -> PoolLaw (reserveProduct (removeLiqW (resX k p) (resY k p) dx dy)) (removeLiqW (resX k p) (resY k p) dx dy) -> (k' : U256) * Pool k' :=
+  fun (k : U256) (p : Pool k) (dx dy : U256) (h : Share (resX k p) (resY k p) dx dy) (hp : PoolLaw (reserveProduct (removeLiqW (resX k p) (resY k p) dx dy)) (removeLiqW (resX k p) (resY k p) dx dy)) =>
+    pack (reserveProduct (removeLiqW (resX k p) (resY k p) dx dy))
+      (poolFromWords (reserveProduct (removeLiqW (resX k p) (resY k p) dx dy)) (removeLiqW (resX k p) (resY k p) dx dy) hp)
+def k0 : U256 := 1000000u
+def p0 : Pool k0 := mkPool k0 1000u 1000u refl refl refl
+def d100 : Positive := pack 100u refl
+
+-- The attest is one Schnorr signature (R, s) over msg = keccak(keccak(side, proposal number), word).
+-- The check is s G = R + e pk with e = keccak(keccak(H(R), H(pk)), msg).
+def g : Prod U256 U256 := pair 1u 2u
+def Point : Type 0 := Prod U256 U256
+def ptEq : Point -> Point -> Flag := fun (a : Point) (b : Point) =>
+  flagIf (u256Eq (first a) (first b)) (u256Eq (second a) (second b)) flagNo
+def hashPt : Point -> U256 := fun (q : Point) => hash (first q) (second q)
+def pk : Point := ecMul g 7u
+def attestMsg : U256 -> U256 -> U256 -> U256 := fun (side : U256) (n : U256) (d : U256) => hash (hash side n) d
+def schnorrOk : Point -> U256 -> Prod Point U256 -> Flag := fun (y : Point) (msg : U256) (sig : Prod Point U256) =>
+  ptEq (ecMul g (second sig)) (ecAdd (first sig) (ecMul y (hash (hash (hashPt (first sig)) (hashPt y)) msg)))
+
+-- DecisionW is the word form of the Decision of examples/tally.lang: keep, addLiq (dx, dy) or removeLiq (dx, dy).
+def LiqW : Type 0 := Sum (Prod U256 U256) (Prod U256 U256)
+def DecisionW : Type 0 := Sum Unit LiqW
+def keepW : DecisionW := inl unit
+def addW : U256 -> U256 -> DecisionW := fun (dx dy : U256) => inr (inl (pair dx dy))
+def removeW : U256 -> U256 -> DecisionW := fun (dx dy : U256) => inr (inr (pair dx dy))
+-- The Decision word. keep has dx = dy = 0. Another tag or another amount gives another word.
+def decisionWord : DecisionW -> U256 := fun (d : DecisionW) =>
+  either (fun (u : Unit) => hash (hash 0u 0u) 0u)
+    (fun (l : LiqW) => either (fun (a : Prod U256 U256) => hash (hash 1u (first a)) (second a))
+      (fun (a : Prod U256 U256) => hash (hash 2u (first a)) (second a)) l) d
+-- The word checks are the predicates of PriceEq and Share, with the positive
+-- amounts required by addLiq. A stale Decision can fail after a swap changes
+-- the price. Refuse it before changing reserves on either side.
+def addOk : U256 -> U256 -> U256 -> U256 -> Flag := fun (x y dx dy : U256) =>
+  flagIf (u256Le 1u dx) (flagIf (u256Le 1u dy)
+    (flagIf (u256Le (mul dx y) (mul dy x))
+      (u256Le (u256Add (mul dy x) 1u) (u256Add (mul dx y) x)) flagNo) flagNo) flagNo
+def removeOk : U256 -> U256 -> U256 -> U256 -> Flag := fun (x y dx dy : U256) =>
+  flagIf (u256Le (u256Add dx 1u) x)
+    (flagIf (u256Le (mul dy x) (mul dx y))
+      (u256Le (u256Add (mul dx y) 1u) (u256Add (mul dy x) x)) flagNo) flagNo
+def decisionOk : DecisionW -> Prod U256 U256 -> Flag := fun (d : DecisionW) (r : Prod U256 U256) =>
+  either (fun (u : Unit) => flagYes)
+    (fun (l : LiqW) => either (fun (a : Prod U256 U256) => addOk (first r) (second r) (first a) (second a))
+      (fun (a : Prod U256 U256) => removeOk (first r) (second r) (first a) (second a)) l) d
+-- enactW runs a valid Decision on the reserves (x, y). The home side runs it directly.
+def enactW : DecisionW -> Prod U256 U256 -> Prod U256 U256 := fun (d : DecisionW) (r : Prod U256 U256) =>
+  flagIf (decisionOk d r) (either (fun (u : Unit) => r)
+    (fun (l : LiqW) => either (fun (a : Prod U256 U256) => addLiqW (first r) (second r) (first a) (second a))
+      (fun (a : Prod U256 U256) => removeLiqW (first r) (second r) (first a) (second a)) l) d) r
+def freshProposal : U256 -> List U256 -> Flag := fun (n : U256) (done : List U256) =>
+  fold (fun (m : U256) (rest : Flag) => flagIf (u256Eq n m) flagNo rest) flagYes done
+-- State holds the reserves and the enacted proposal numbers. Consume a number
+-- only when its signature and the liquidity preconditions both hold.
+-- Force the guarded reserves before exposing either state field: projecting
+-- the enacted list must not skip checkedReserves in the lazy evaluator.
+def EnactState : Type 0 := Prod (Prod U256 U256) (List U256)
+def enactRemote : U256 -> DecisionW -> Prod Point U256 -> EnactState -> EnactState :=
+  fun (n : U256) (d : DecisionW) (sig : Prod Point U256) (st : EnactState) =>
+    flagIf (freshProposal n (second st))
+      (flagIf (schnorrOk pk (attestMsg 0u n (decisionWord d)) sig)
+        (flagIf (decisionOk d (first st))
+          (flagIf (u256Le 1u (first (enactW d (first st))))
+            (pair (enactW d (first st)) (cons n (second st))) st) st) st) st
+
+-- The fixed values: the reserves (1000, 1000), addLiq (100, 100) at the proposal 1 and removeLiq (100, 100)
+-- at the proposal 2.
+def r0 : Prod U256 U256 := pair 1000u 1000u
+def addD : DecisionW := addW 100u 100u
+def removeD : DecisionW := removeW 100u 100u
+-- The nonces are 23 and 29 and the key is 7, so s = k + 7 e mod r (off-chain literals).
+def sAdd : U256 := 0x2759611834b4be056e205b2eceaf0ca378dae9f3d2ce018e3b8fb78d5d92ab48u
+def sRemove : U256 := 0x104a9dc8b94189a2419ebe6c77ddcd5b08f10a66f213d894eb335cf103490791u
+def sigAdd : Prod Point U256 := pair (ecMul g 23u) sAdd
+def sigRemove : Prod Point U256 := pair (ecMul g 29u) sRemove
+-- Attested n d sig is the typed attest. addLiqRemote is addLiq with the attest of the Decision as an argument.
+def Attested : U256 -> DecisionW -> Prod Point U256 -> Type 0 := fun (n : U256) (d : DecisionW) (sig : Prod Point U256) =>
+  Path Flag (schnorrOk pk (attestMsg 0u n (decisionWord d)) sig) flagYes
+def RemotePool : U256 -> Type 0 := fun (k : U256) => Prod (Pool k) (List U256)
+def addLiqRemote : (k : U256) -> (st : RemotePool k) -> (n : U256) -> (dx dy : Positive) -> (sig : Prod Point U256) -> Attested n (addW (witness dx) (witness dy)) sig -> Path Flag (freshProposal n (second st)) flagYes -> PriceEq (resX k (first st)) (resY k (first st)) (witness dx) (witness dy) -> PoolLaw k (addLiqW (resX k (first st)) (resY k (first st)) (witness dx) (witness dy)) -> RemotePool k :=
+  fun (k : U256) (st : RemotePool k) (n : U256) (dx dy : Positive) (sig : Prod Point U256) (a : Attested n (addW (witness dx) (witness dy)) sig) (f : Path Flag (freshProposal n (second st)) flagYes) (h : PriceEq (resX k (first st)) (resY k (first st)) (witness dx) (witness dy)) (hp : PoolLaw k (addLiqW (resX k (first st)) (resY k (first st)) (witness dx) (witness dy))) =>
+    pair (addLiq k (first st) dx dy h hp) (cons n (second st))
+def pRemoteAddState : RemotePool k0 := addLiqRemote k0 (pair p0 nil) 1u d100 d100 sigAdd refl refl (pair refl refl) (pair refl (pair refl refl))
+-- PATH_END: proposal 1 is already enacted, despite its still-valid attest.
+def addTwice : RemotePool k0 := addLiqRemote k0 pRemoteAddState 1u d100 d100 sigAdd refl refl (pair refl refl) (pair refl (pair refl refl))

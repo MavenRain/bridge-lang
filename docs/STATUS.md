@@ -612,3 +612,68 @@ Traps found in S9 s1:
 The other counts do not change: parse refusals 19, pool refusals 4,
 bridge refusals 6, kit-only refusals 22, proves 2, contracts 2 written 5
 refused, rings 6 built 2 refused, differential 28 guest evals, runs 5.
+
+## S9 s2
+
+Slice S9 s2 (the remote enactment and the signed ballot, PLAN 3.1, 4.3,
+4.6 and 7, Q-S9-3 (a) and Q-S9-4 (b)) is complete. Thus S9 is complete,
+and Part D is closed. The change is not committed; its base is the USER
+commit 174f975 on b71c078 (the S9 s1 tree). The gate `make clean` then
+`make check` is GREEN, exit 0. There is no src change and no domain
+change.
+
+Changes (O64 to O68):
+
+- `examples/enact.lang` (new, kit, a row of `examples/kit.txt`): the
+  Decision word `decisionWord`, the home enactment `enactW`, the remote
+  enactment `enactRemote` with a Schnorr attest, the typed `Attested`
+  and `addLiqRemote`, and the laws `lawAttest` and `lawRemoteAdd` (O64).
+- `examples/ballot.lang` (new, kit, a row of `examples/kit.txt`): the
+  ring-signed ballot `VoteSig`, the one-poll `Box`, `castSigned`, the
+  poll word "ballot", and the laws `lawVote` and `lawDup` (O65, O66).
+- `test/check/ballot-twice.lang`, `ballot-poll.lang` and
+  `enact-twice.lang` (new, rows of `test/check/kit.txt`): duplicate
+  ballots, cross-poll signatures and duplicate typed enactments refuse
+  with `PATH_END` (O67, O69).
+- `test/eval/expect.txt`: 37 new rows after `tally-ideal closedAll`: 25
+  `enact` rows and 12 `ballot` rows.
+
+Traps found in S9 s2:
+
+- The M5 mutant (a `VoteSig` with no `fresh` check) does not show in the
+  eval rows, because the rows check `fresh`, not `castSigned`. Only the
+  check row `ballot-twice.lang` kills it (O67).
+- The key image does not change with the poll, because H_p has no tag.
+  A `Box` holds one poll, and S10 keys the spent set by the poll (O66).
+- The poll word must not be the claim word. With the claim tag in
+  `ballotPollOf` (M4), a ballot signature is also correct at the claim
+  poll (O65, O67).
+- Review found same-proposal replay: the original removal could run
+  twice, producing reserves `(800, 800)` rather than `(900, 900)`.
+  `EnactState` and `RemotePool k` now retain enacted proposal numbers;
+  callers thread the returned state (O69).
+- Review found that a poll-2 signature could enter a poll-1 Box. A Box
+  now stores its poll number, and `castSigned` checks that poll (O69).
+- Review found that `enactW` bypassed the price and share predicates.
+  `decisionOk` now checks them before changing reserves. A stale,
+  correctly signed Decision is refused without consuming its proposal.
+  Rounding toward the pool remains accepted (O69).
+
+| Count | S9 s1 | S9 s2 | Reason |
+|---|---|---|---|
+| examples | 52 | 54 | `enact.lang`, `ballot.lang` |
+| parse refusals | 19 | 19 | no new parse row |
+| check refusals | 188 | 191 | `ballot-twice.lang`, `ballot-poll.lang`, `enact-twice.lang` (`PATH_END`) |
+| pool refusals | 4 | 4 | no new pool row |
+| bridge refusals | 6 | 6 | no new bridge row |
+| kit-only refusals | 22 | 22 | This count is the `REFUSE_KIT` rows of `test/check/expect.txt` (`test/gate.sh`). `ballot-twice.lang` is a `PATH_END` row (it is refused also under `--kit`), thus it is a check refusal, not a kit-only refusal |
+| evals | 277 | 314 | 25 `enact` rows, 12 `ballot` rows |
+| proves | 2 | 2 | no new prove row |
+| contracts | 2 written, 5 refused | 2 written, 5 refused | no contract change |
+| rings | 6 built, 2 refused | 6 built, 2 refused | no ring change |
+| differential | 28 guest evals | 28 guest evals | no new differential row |
+
+The host counts do not change: runs 5, differential 14 host runs, run
+refusals 10, asmtool 8 checks, builds 3, lower refusals 16, build checks
+33, dispatch 20 checks, evm steps 43, differential 14 EVM rows,
+precompile 128 steps, mock 13 rows, diff 15 rows.

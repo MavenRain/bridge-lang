@@ -371,7 +371,7 @@ The ring size bounds the gas of `claim` (O17).
 | S6 | Part B: credit, `InFlight`, `deposit`, `seal`, `accept`, `claim` on the guest side; conservation; `ua e` transport | DONE (2026-10-22): examples 43, parse refusals 19, check refusals 171, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 199, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | s1 DONE (2026-10-23), the guest side (Q-S7-1 (a)): examples 46, parse refusals 19, check refusals 174, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 217, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the host and precompile rows wait for intent-lang S5 and S6 (O33); s2 DONE (2026-10-23), the port of intent-lang 1b65dec (the sealed `Enc`, the law-only `decrypt` and the host ElGamal) and the Q-S3-2 (a) item (O53 to O58, Q-S7-3 (a)): examples 50, parse refusals 19, check refusals 185, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 267, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the precompile rows wait for the port of intent-lang S6 9b99528 (O33) |
 | S8 | `ZKBridge` as the mapping cylinder; `ZKBridge ≃ BridgeState`; bLSAG claim rings and key images | DONE (2026-10-23), the guest side (Q-S8-1 (a) to Q-S8-4 (a)): examples 47, parse refusals 19, check refusals 175, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 237, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; no src change and no domain change (O38 to O43) |
-| S9 | Part D: encrypted ballots, `tallyEnc`, the tally law, liquidity Decisions, the remote enactment | s1 DONE (2026-10-23), the tally, the tally law and the liquidity Decisions (Q-S9-1 (a), Q-S9-2 (a)): examples 52, parse refusals 19, check refusals 188, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 277, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s1 has no src change and no domain change (O59 to O63); s2 (the remote enactment and the signed ballot) PLANNED |
+| S9 | Part D: encrypted ballots, `tallyEnc`, the tally law, liquidity Decisions, the remote enactment | DONE (2026-10-24), Part D is closed. s1 DONE (2026-10-23), the tally, the tally law and the liquidity Decisions (Q-S9-1 (a), Q-S9-2 (a)): examples 52, parse refusals 19, check refusals 188, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 277, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s1 has no src change and no domain change (O59 to O63). s2 DONE (2026-10-24), the remote enactment and the signed ballot in the kit examples `examples/enact.lang` and `examples/ballot.lang` (Q-S9-3 (a), Q-S9-4 (b)): examples 54, parse refusals 19, check refusals 191, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 314, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s2 has no src change and no domain change (O64 to O68) |
 | S10 | The contract of section 7: writer, two-deployment differential, gas and size rows | PLANNED |
 | S11 | Mutants and close | PLANNED |
 
@@ -837,6 +837,84 @@ The ring size bounds the gas of `claim` (O17).
   different ciphertext (both `TYPE_MISMATCH`). `tally-open.lang` still
   refuses guest opening with `REFUSE_LAW`. Three new kit evals cover
   zero, one and three yes votes; the existing row covers two.
+- O64: S9 s2, the remote enactment (PLAN 4.3, 7, Q8). The kit example
+  `examples/enact.lang` copies the pool defs of `examples/pool.lang` and
+  the Schnorr defs of `examples/elgamal.lang` (each example is
+  standalone). `DecisionW := Sum Unit LiqW` is the `U256` form of the s1
+  `Decision`: keep, addLiq (dx, dy) or removeLiq (dx, dy). The Decision
+  word is `decisionWord d := hash (hash tag dx) dy` (keccak). The tag is
+  0 for keep (dx = dy = 0), 1 for addLiq and 2 for removeLiq. The home
+  side runs `enactW d r` directly. The other side runs `enactRemote n d
+  sig st`, and it changes the pool only with an attest: a Schnorr
+  signature of `attestMsg 0u n (decisionWord d)`, as `attestOk` of
+  `examples/elgamal.lang`. Side 0 is the home side, and n is the
+  proposal number. A wrong signature, a wrong word or a replay at a
+  different proposal number keeps the pool. `EnactState` holds reserves
+  and enacted proposal numbers, so the same proposal also cannot enact
+  twice. `decisionOk` checks the positive add amounts and the `PriceEq`
+  or `Share` predicates before `enactW` changes reserves. The typed form
+  `Attested n d sig` is a Path to `flagYes`. `addLiqRemote` takes it with
+  a freshness proof and the `PriceEq` and `PoolLaw` proofs of `addLiq`,
+  and returns the updated `RemotePool k` with its enacted list. Callers
+  thread the returned state. The laws `lawAttest` and
+  `lawRemoteAdd` are refl. `sigAdd` and `sigRemove` are fixed test
+  signatures of the key 7: s = k + 7 e mod r, with literals that are
+  calculated off the chain. The 12 hand-written `enact` eval rows agree
+  with the first run.
+- O65: S9 s2, the signed ballot (PLAN 3.1, 4.6, Q-S9-1 (a)). The kit
+  example `examples/ballot.lang` copies the ballot defs of
+  `examples/tally.lang` (`sizeAdd` to `castEnc`, with no `Member`) and
+  the ring defs of `examples/bridge.lang` (`Key` to `fresh`). `voters`
+  is the ring of the keys `zkKey 0`, `zkKey 1` and `zkKey 2`. The ring
+  signature signs the ciphertext word w at the poll word `ballotPollOf
+  n := hash 0x62616c6c6f74u n` ("ballot"). This word is not the claim
+  word 0x636c61696du of O39, thus a ballot signature is not a claim
+  signature. `VoteSig n w s spent` is a pair of two Paths to `flagYes`:
+  `zkVerify` of the signature and `fresh (sigImage s) spent`. `Box :=
+  Prod U256 (Prod (List Ballot) (List Key))` holds the poll number,
+  ballots and key images. `castSigned` verifies at `boxPoll box`, adds
+  the ballot and key image, and preserves that poll number. Q-S9-3 (a)
+  is taken: w is an input in s2, and the S10
+  `cast` hashes the stored ElGamal ciphertext into w. The 10
+  hand-written `ballot` eval rows agree with the first run.
+- O66: the key image does not change with the poll. H_p has no tag (the
+  S8 `imgBallot` row), thus the key image of a voter is the same at each
+  poll (the `imgPollFree` row). Thus the spent list of a `Box` is the
+  spent list of one poll. S10 keys the spent set by the poll.
+- O67: the hand mutants of S9 s2, on scratch copies (`langc --kit check`
+  and `eval` of one file; the repo files did not change). M1 (`sAdd` + 1
+  in `sigAdd`) is KILLED: check refuses `pRemoteAdd` with `PATH_END`,
+  thus all 12 `enact` rows stop. M2 (the `flagIf` arms of `enactRemote`
+  in the opposite order) is KILLED: 5 rows differ. M3 (tag 1u for
+  removeLiq in `decisionWord`) is KILLED: 4 rows differ. M4 (the claim
+  tag in `ballotPollOf`) is KILLED: the `voteAtClaim` row differs. M5
+  (the `fresh` half of `VoteSig` changed to `Path Flag flagYes flagYes`)
+  keeps the shape, thus `ballot.lang` checks and no eval row differs:
+  the rows check `fresh`, not `castSigned`. The new check row
+  `test/check/ballot-twice.lang` (a row of `test/check/kit.txt`) kills
+  M5. Its `boxTwice` adds a second ballot of key 0 (`svDup`) to `box1`,
+  and langc refuses it with `PATH_END`.
+- O68: the builder calls of S9 s2. There is no builder call: the main
+  loop built S9 s2 by hand (USER ruling 10-05, as in O62). The first
+  session made the s2 map, the second session did the build, and the
+  third session did the record. The optional host tally row
+  (`test/elgamaltool.c`) is not built, thus Q-S9-4 (b) is taken: the row
+  moves to S10 with the one-hot proof.
+- O69: review fixes (2026-10-24). The original `enactRemote` accepted
+  `sigRemove` twice at proposal 2, taking `(1000, 1000)` to `(800, 800)`
+  instead of stopping at `(900, 900)`. The enacted list now prevents
+  this for both the word and typed APIs. The original `castSigned`
+  accepted a fresh voter's poll-2 signature into `box1` of poll 1;
+  the poll now comes from the Box. The original `enactW` accepted
+  add `(100, 1)` or remove `(100, 1)` at `(1000, 1000)`, although these
+  violate `PriceEq` and `Share`; the word predicates now keep the pool.
+  A changed pool price also refuses a stale, correctly attested add
+  without consuming its proposal. `ballot-poll.lang` and
+  `enact-twice.lang` are `PATH_END` refusals, and `ballot-twice.lang`
+  follows the updated Box API. Fifteen new eval rows cover replay,
+  invalid and rounded liquidity, independent poll state, and reserve
+  guards on both state projections. The s2 totals after review are
+  191 check refusals and 314 evals.
 
 ## 11. Questions for the USER (S1)
 
@@ -1097,3 +1175,16 @@ Q-S7-3 (a) is taken. Q-S7-3 waits for the USER ruling.
   ballot. RECOMMENDED, taken (O60). (b) one slice.
 
 Q-S9-1 (a) and Q-S9-2 (a) are taken. They wait for the USER ruling.
+
+### S9 s2 questions (OPEN)
+
+- Q-S9-3 (the ballot word). (a) the ring signature signs a ciphertext
+  word w, an input in s2; the S10 `cast` hashes the stored ElGamal
+  ciphertext. RECOMMENDED, taken (O65). (b) a kit `encWord : Enc Votes
+  -> U256` (a sealed eliminator into words; it is law-only).
+- Q-S9-4 (the host tally row). (a) add it in s2 (`test/elgamaltool.c`).
+  (b) defer it to S10 with the one-hot proof. Taken (O68), because s2
+  did not build the host row. (a) is still possible: S10 can add the
+  row first.
+
+Q-S9-3 (a) and Q-S9-4 (b) are taken. They wait for the USER ruling.

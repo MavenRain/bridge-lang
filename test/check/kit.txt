@@ -91,3 +91,6 @@ elim-path-case.lang
 attest-wrong.lang
 cofamily-state.lang
 enc-state.lang
+ballot-twice.lang
+ballot-poll.lang
+enact-twice.lang

@@ -186,3 +186,6 @@ law-guest.lang REFUSE_DATA
 tally-open.lang REFUSE_LAW
 tally-ballot.lang TYPE_MISMATCH
 tally-proof.lang TYPE_MISMATCH
+ballot-twice.lang PATH_END
+ballot-poll.lang PATH_END
+enact-twice.lang PATH_END

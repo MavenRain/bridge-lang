@@ -1,0 +1,72 @@
+-- The signed ballot (S9 s2, PLAN 3.1, 4.6). A ballot is the encrypted one-hot
+-- vote of examples/tally.lang. A voter signs the ciphertext word w with the S8
+-- ring signature over the voter keys at the poll word of the poll (Q-S9-3 (a)).
+-- castSigned keeps the key image of the signature in the spent list of the
+-- poll, and VoteSig asks that the image is fresh. So one key casts one ballot
+-- at one poll, and the poll does not learn which voter cast it.
+-- The key image does not change with the poll (H_p has no tag, S8 imgBallot).
+-- So each poll has its own spent list: a Box is one poll.
+-- A kit file is checked alone. So the ballot defs are a copy of
+-- examples/tally.lang and the ring defs are a copy of examples/bridge.lang.
+def sizeAdd : Size -> Size -> Size :=
+  fun (n : Size) (m : Size) => fold m (fun (r : Size) => szS r) n
+def Choice : Type 0 := Sum Unit Unit
+def Votes : Type 0 := Prod Size Size
+def vadd : Votes -> Votes -> Votes := fun (u : Votes) (v : Votes) =>
+  pair (sizeAdd (first u) (first v)) (sizeAdd (second u) (second v))
+def oneHot : Choice -> Votes := fun (c : Choice) =>
+  either (fun (u : Unit) => pair (szS sz0) sz0) (fun (u : Unit) => pair sz0 (szS sz0)) c
+-- The proof is bound to this ciphertext and hidden under Trunc1. A bare
+-- Enc Votes could give one member several votes or votes for both choices.
+def OneHot : Enc Votes -> Type 0 := fun (c : Enc Votes) =>
+  Trunc1 ((v : Choice) * Path Votes (decrypt Votes c) (oneHot v))
+def Ballot : Type 0 := (c : Enc Votes) * OneHot c
+def castEnc : Choice -> Ballot := fun (c : Choice) =>
+  pack (encEta Votes (oneHot c))
+    (trunc1 ((v : Choice) * Path Votes (oneHot c) (oneHot v))
+      (pack c refl))
+-- Key is a one-time BN254 G1 key as its two affine coordinates (examples/bn254.lang). S8 puts the keys of a batch in a claim ring.
+def Key : Type 0 := Prod U256 U256
+def gen : Key := pair 1u 2u
+-- The key image I is the last two words of a signature. The fold visits the tail first.
+def imgStep : U256 -> Prod U256 Key -> Prod U256 Key := fun (w : U256) (r : Prod U256 Key) =>
+  flagIf (u256Eq (first r) 0u) (pair 1u (pair 0u w))
+    (flagIf (u256Eq (first r) 1u) (pair 2u (pair w (second (second r)))) r)
+def sigImage : List U256 -> Key := fun (s : List U256) => second (fold imgStep (pair 0u (pair 0u 0u)) s)
+def sameKey : Key -> Key -> Flag := fun (a b : Key) => flagIf (u256Eq (first a) (first b)) (u256Eq (second a) (second b)) flagNo
+def spentHas : Key -> List Key -> Flag := fun (i : Key) (l : List Key) =>
+  fold (fun (j : Key) (r : Flag) => flagIf (sameKey i j) flagYes r) flagNo l
+def fresh : Key -> List Key -> Flag := fun (i : Key) (l : List Key) => flagIf (spentHas i l) flagNo flagYes
+
+-- The voter ring is the curve keys of the test keys 0, 1 and 2.
+def voters : List Key := cons (ecMul gen (zkKey 0)) (cons (ecMul gen (zkKey 1)) (cons (ecMul gen (zkKey 2)) nil))
+-- The poll word is the domain word "ballot" and the poll number. It is not the claim word "claim" (O39), so a claim
+-- signature is not a ballot signature.
+def ballotPollOf : U256 -> U256 := fun (n : U256) => hash 0x62616c6c6f74u n
+def claimPoll1 : U256 := hash 0x636c61696du 1u
+-- VoteSig n w s spent: s is a ring signature by a voter over the word w at the poll n, and its key image is not
+-- in spent. In S10, cast makes w from the stored ElGamal ciphertext (Q-S9-3 (a)). In s2, w is an input.
+def VoteSig : U256 -> U256 -> List U256 -> List Key -> Type 0 := fun (n : U256) (w : U256) (s : List U256) (spent : List Key) =>
+  Prod (Path Flag (zkVerify voters (ballotPollOf n) w s) flagYes) (Path Flag (fresh (sigImage s) spent) flagYes)
+-- A Box stores its poll number with its ballots and spent key images. The
+-- signature is checked at that stored poll. Callers thread the returned Box.
+def Box : Type 0 := Prod U256 (Prod (List Ballot) (List Key))
+def boxPoll : Box -> U256 := fun (box : Box) => first box
+def boxBallots : Box -> List Ballot := fun (box : Box) => first (second box)
+def boxSpent : Box -> List Key := fun (box : Box) => second (second box)
+def emptyBox : U256 -> Box := fun (n : U256) => pair n (pair nil nil)
+def castSigned : (box : Box) -> Ballot -> (w : U256) -> (s : List U256) -> VoteSig (boxPoll box) w s (boxSpent box) -> Box :=
+  fun (box : Box) (b : Ballot) (w : U256) (s : List U256) (h : VoteSig (boxPoll box) w s (boxSpent box)) =>
+    pair (boxPoll box) (pair (cons b (boxBallots box)) (cons (sigImage s) (boxSpent box)))
+
+-- The poll 1 at fixed values: the voter 0 votes for the first choice, then the voter 1 votes for the second.
+def w0 : U256 := 11u
+def w1 : U256 := 12u
+def sv0 : List U256 := zkSign voters (zkKey 0) (ballotPollOf 1u) w0
+def sv1 : List U256 := zkSign voters (zkKey 1) (ballotPollOf 1u) w1
+-- svDup is a second signature by the voter 0 at the poll 1, over another word.
+def svDup : List U256 := zkSign voters (zkKey 0) (ballotPollOf 1u) w1
+def box0 : Box := emptyBox 1u
+def box1 : Box := castSigned box0 (castEnc (inl unit)) w0 sv0 (pair refl refl)
+-- PATH_END: a second signature by voter 0 is not fresh in the returned Box.
+def boxTwice : Box := castSigned box1 (castEnc (inr unit)) w1 svDup (pair refl refl)
