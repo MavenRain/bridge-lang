@@ -183,3 +183,6 @@ enc-proj.lang REFUSE_LAW
 enc-relay.lang REFUSE_LAW
 enc-state.lang REFUSE_STATE
 law-guest.lang REFUSE_DATA
+tally-open.lang REFUSE_LAW
+tally-ballot.lang TYPE_MISMATCH
+tally-proof.lang TYPE_MISMATCH

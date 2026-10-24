@@ -1,0 +1,29 @@
+-- TYPE_MISMATCH: an encrypted count of two yes votes is not a certified ballot.
+def sizeAdd : Size -> Size -> Size :=
+  fun (n : Size) (m : Size) => fold m (fun (r : Size) => szS r) n
+def Member : Type 0 := Sum Unit (Sum Unit Unit)
+def Choice : Type 0 := Sum Unit Unit
+def m0 : Member := inl unit
+def m1 : Member := inr (inl unit)
+def m2 : Member := inr (inr unit)
+def Votes : Type 0 := Prod Size Size
+def vadd : Votes -> Votes -> Votes := fun (u : Votes) (v : Votes) =>
+  pair (sizeAdd (first u) (first v)) (sizeAdd (second u) (second v))
+def oneHot : Choice -> Votes := fun (c : Choice) =>
+  either (fun (u : Unit) => pair (szS sz0) sz0) (fun (u : Unit) => pair sz0 (szS sz0)) c
+-- The proof is bound to this ciphertext and hidden under Trunc1. A bare
+-- Enc Votes could give one member several votes or votes for both choices.
+def OneHot : Enc Votes -> Type 0 := fun (c : Enc Votes) =>
+  Trunc1 ((v : Choice) * Path Votes (decrypt Votes c) (oneHot v))
+def Ballot : Type 0 := (c : Enc Votes) * OneHot c
+def castEnc : Choice -> Ballot := fun (c : Choice) =>
+  pack (encEta Votes (oneHot c))
+    (trunc1 ((v : Choice) * Path Votes (oneHot c) (oneHot v))
+      (pack c refl))
+def ballotsAt : Choice -> Choice -> Choice -> Member -> Ballot :=
+  fun (c0 c1 c2 : Choice) (m : Member) =>
+  either (fun (u : Unit) => castEnc c0)
+    (fun (r : Sum Unit Unit) => either (fun (u : Unit) => castEnc c1) (fun (u : Unit) => castEnc c2) r) m
+def tallyEnc : (Member -> Ballot) -> Enc Votes := fun (bs : Member -> Ballot) =>
+  encOp2 Votes Votes Votes vadd (encOp2 Votes Votes Votes vadd (witness (bs m0)) (witness (bs m1))) (witness (bs m2))
+def forged : Ballot := encEta Votes (pair (szS (szS sz0)) sz0)

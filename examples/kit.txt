@@ -34,3 +34,4 @@ bridge.lang
 elgamal.lang
 trace.lang
 enc-ideal.lang
+tally-ideal.lang

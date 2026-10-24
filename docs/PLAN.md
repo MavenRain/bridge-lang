@@ -371,7 +371,7 @@ The ring size bounds the gas of `claim` (O17).
 | S6 | Part B: credit, `InFlight`, `deposit`, `seal`, `accept`, `claim` on the guest side; conservation; `ua e` transport | DONE (2026-10-22): examples 43, parse refusals 19, check refusals 171, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 199, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | s1 DONE (2026-10-23), the guest side (Q-S7-1 (a)): examples 46, parse refusals 19, check refusals 174, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 217, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the host and precompile rows wait for intent-lang S5 and S6 (O33); s2 DONE (2026-10-23), the port of intent-lang 1b65dec (the sealed `Enc`, the law-only `decrypt` and the host ElGamal) and the Q-S3-2 (a) item (O53 to O58, Q-S7-3 (a)): examples 50, parse refusals 19, check refusals 185, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 267, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the precompile rows wait for the port of intent-lang S6 9b99528 (O33) |
 | S8 | `ZKBridge` as the mapping cylinder; `ZKBridge ≃ BridgeState`; bLSAG claim rings and key images | DONE (2026-10-23), the guest side (Q-S8-1 (a) to Q-S8-4 (a)): examples 47, parse refusals 19, check refusals 175, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 237, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; no src change and no domain change (O38 to O43) |
-| S9 | Part D: encrypted ballots, `tallyEnc`, the tally law, liquidity Decisions, the remote enactment | PLANNED |
+| S9 | Part D: encrypted ballots, `tallyEnc`, the tally law, liquidity Decisions, the remote enactment | s1 DONE (2026-10-23), the tally, the tally law and the liquidity Decisions (Q-S9-1 (a), Q-S9-2 (a)): examples 52, parse refusals 19, check refusals 188, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 277, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s1 has no src change and no domain change (O59 to O63); s2 (the remote enactment and the signed ballot) PLANNED |
 | S10 | The contract of section 7: writer, two-deployment differential, gas and size rows | PLANNED |
 | S11 | Mutants and close | PLANNED |
 
@@ -773,6 +773,70 @@ The ring size bounds the gas of `claim` (O17).
   expected 23 kit-only refusals. The real count is 22: `enc-state.lang`
   is a `REFUSE_STATE` row checked with `--kit` (`test/check/kit.txt`),
   not a `REFUSE_KIT` row.
+- O59: the USER edit of b71c078 (the S7 s2 commit). The commit tree
+  7f204eec is not the staged tree 1c5dd4c0. In `src/front/check.c`
+  `rule_path`, `core_ends(..., CORE_PATHP, "_", t, ...)` replaces NULL:
+  the checked carrier stays in `CORE_PATHP.a`, so the law-use check sees
+  the carrier before it is quoted under the interval binder (+1 comment
+  line). A law-only name in a Path carrier (for example `Path ((fun _ =>
+  Size) (decrypt Size c)) sz0 sz0`) is now refused. `test/fronttool.c`
+  has 5 new `law_guest` rows after `shadowed`: `erasedCarrier`,
+  `carrierAnn`, `checkedCarrier` and `carrierRelay` (`REFUSE_LAW`), and
+  `truncatedCarrier` (accepted, because the carrier is under `Trunc1`).
+  For S9: a guest def cannot hide `decrypt` in a Path carrier through a
+  beta redex. The S9 laws use `decrypt` only in the ends of a Path.
+- O60: S9 s1, the tally (PLAN 3.1, Q-S9-1 (a), Q-S9-2 (a)). The guest
+  example `examples/tally.lang` has `Votes := Prod Size Size` (counts
+  for 2 choices). `Ballot` pairs an `Enc Votes` with a
+  truncated proof that it encrypts `oneHot v` for some `Choice` v (O63).
+  `castEnc` packages the ciphertext and this proof. `tallyEnc` uses two
+  `encOp2` of `vadd` over the ciphertexts of the 3 members without
+  opening them. `count` is the plain sum. The tally law
+  `tallyLaw : Path Votes (decrypt Votes (tallyEnc bs)) (count (fun m =>
+  decrypt Votes (witness (bs m))))` is the intent-lang 3.1 law, with `open q` as
+  `decrypt` (`open q c` is `decrypt c`, the kit `openLaw`). Its proof
+  `tally3` is a triple `elim` on the 3 ciphertexts, in the form of
+  `lawOp2` in `examples/enc.lang`: refl fails at neutral ciphertexts
+  (O55). `tally3` and `tallyLaw` use `decrypt` only in the ends of a
+  Path, so they are law-only defs with a law type (rule O7, O59). There
+  is no intent-lang source: intent-lang 9b99528 has only the plan rows.
+- O61: the liquidity Decisions (PLAN 4.3, Q4). `Liq := Sum Votes Votes`
+  is the addLiq or removeLiq amount pair (the guest `Size` surrogate of
+  the kit `U256` pair of `examples/pool.lang`). `Decision := Sum Unit
+  Liq`, and `inl unit` keeps the pool. `decide p v` is `inr p` when the
+  first count is 2 or more (2 of 3 members), else `inl unit`. `level`
+  folds `up` from the def `lzero` (the map form; the fold base has a
+  known type). `closeLaw` is the cong of `decide p` on `tallyLaw`. The
+  kit example `examples/tally-ideal.lang` copies the defs from `sizeAdd`
+  to `decide` (each example is standalone) and the kit `Quorum` and
+  `open` of `examples/enc-ideal.lang` (Q-S7-3 (a)). Then it opens the
+  tally: `opened`, `counted`, `close` and `closed`. A guest def that
+  opens the tally is `REFUSE_LAW` (`test/check/tally-open.lang`). The 7
+  hand-written eval values agree with the run. The `tallied` row prints
+  `encEta (Prod Size Size) ...`: the alias `Votes` prints as its body.
+  3 hand mutants are killed: the right end of `tally3` (`PATH_END`), the
+  ballot order in `tallyLaw` (`TYPE_MISMATCH`, because `vadd` is not
+  commutative by conversion), and a guest `countAt` that opens the tally
+  (`REFUSE_LAW`). No src change and no domain change.
+- O62: the builder calls of S9 s1. There is no builder call: the main
+  loop built S9 s1 by hand (USER ruling 10-05, as in O42, O47, O50 and
+  O58). The first session made the map (Step 0 and Step 1) and stopped
+  at the step budget with a clean tree. A second session did the build
+  and the record.
+- O63: the S9 s1 review found that `Ballot := Enc Votes` admitted an
+  encrypted vector with several yes votes from one member. With m0
+  encrypting (2, 0) and m1 and m2 each encrypting (0, 1), `close` passed
+  the proposal despite two members voting no. `Ballot` now pairs its
+  ciphertext with `OneHot c := Trunc1 ((v : Choice) * Path Votes
+  (decrypt Votes c) (oneHot v))`. The proof is bound to the ciphertext
+  and its witness stays under `Trunc1`. `castEnc` supplies the proof;
+  `tallyEnc` sums only certified ballots and returns `Enc Votes`, since
+  an aggregate is not a single ballot. The tally laws use `witness` to
+  select each ciphertext. `tally-ballot.lang` refuses a bare encrypted
+  (2, 0), and `tally-proof.lang` refuses a certificate copied from a
+  different ciphertext (both `TYPE_MISMATCH`). `tally-open.lang` still
+  refuses guest opening with `REFUSE_LAW`. Three new kit evals cover
+  zero, one and three yes votes; the existing row covers two.
 
 ## 11. Questions for the USER (S1)
 
@@ -1018,3 +1082,18 @@ port of intent-lang 1b65dec) the next slice. No question is OPEN.
   meaning of `open`.
 
 Q-S7-3 (a) is taken. Q-S7-3 waits for the USER ruling.
+
+### S9 questions (OPEN)
+
+- Q-S9-1 (the ballot signature). The domain `Ballot_priv` is
+  `castPrivate m c` over a plain Choice (`zk_source`). An encrypted
+  signed ballot in the domain is a src change. (a) s1 keeps the
+  encrypted ballot as a guest `Enc Votes`, and s2 pairs it with the S8
+  ring signature in the kit (no src change). RECOMMENDED, taken (O60).
+  (b) a domain `Ballot_enc` with an `Enc` payload in `zk_source` (a src
+  change before S10).
+- Q-S9-2 (the S9 split). (a) s1 is the tally, the tally law and the
+  liquidity Decisions; s2 is the remote enactment and the signed
+  ballot. RECOMMENDED, taken (O60). (b) one slice.
+
+Q-S9-1 (a) and Q-S9-2 (a) are taken. They wait for the USER ruling.

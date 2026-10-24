@@ -564,3 +564,51 @@ Traps found in S7 s2:
 The other counts do not change: parse refusals 19, pool refusals 4,
 bridge refusals 6, kit-only refusals 22, proves 2, contracts 2 written 5
 refused, rings 6 built 2 refused, differential 28 guest evals, runs 5.
+
+## S9 s1
+
+Slice S9 s1 (the tally, the tally law and the liquidity Decisions, PLAN
+3.1 and 4.3, Q-S9-1 (a) and Q-S9-2 (a)) is complete. The change is not
+committed; its base is the USER commit b71c078 on e77666f (the S7 s2
+tree with the USER edit O59). The gate `make clean` then `make check` is
+GREEN, exit 0.
+
+Changes (O59 to O63):
+
+- O59 records the USER edit of b71c078: the `rule_path` carrier fix in
+  `src/front/check.c` and 5 `law_guest` rows in `test/fronttool.c`.
+- `examples/tally.lang` (new, guest): `Votes`, a `Ballot` carrying an
+  encrypted vector and a truncated proof that it is one-hot (O63),
+  `castEnc`, `tallyEnc` (by `encOp2`, with no opening), `count`, the
+  tally law `tallyLaw` (its proof `tally3` is a triple `elim`), the
+  liquidity `Decision`, `decide` (2 of 3) and `closeLaw` (O60, O61).
+- `examples/tally-ideal.lang` (new, kit, a row of `examples/kit.txt`):
+  the trusted scope opens the tally: `opened`, `counted`, `close` and
+  `closed` (O61).
+- `test/check/tally-open.lang` (new): a guest def that opens the tally,
+  `REFUSE_LAW`. `tally-ballot.lang` and `tally-proof.lang` reject an
+  uncertified ballot and a proof for a different ciphertext (O63).
+- `test/eval/expect.txt`: 10 new rows after the `enc-ideal` rows: 4
+  `tally` rows and 6 `tally-ideal` rows.
+
+Traps found in S9 s1:
+
+- A Path carrier cannot hide `decrypt` (O59). The S9 laws use `decrypt`
+  only in the ends of a Path.
+- refl fails for the tally law at neutral ciphertexts. The proof is a
+  triple `elim`, as `lawOp2` (O55, O60).
+- `vadd` is not commutative by conversion, so the ballot order of
+  `tallyLaw` must be the order of `tallyEnc` (O61).
+- A bare `Enc Votes` permits one member to submit multiple votes.
+  The ballot now carries a proof of one-hot validity tied to its
+  ciphertext. The aggregate remains `Enc Votes` (O63).
+
+| Count | S7 s2 | S9 s1 | Reason |
+|---|---|---|---|
+| examples | 50 | 52 | `tally.lang`, `tally-ideal.lang` |
+| check refusals | 185 | 188 | `tally-open.lang`, `tally-ballot.lang`, `tally-proof.lang` |
+| evals | 267 | 277 | 4 `tally` rows, 6 `tally-ideal` rows |
+
+The other counts do not change: parse refusals 19, pool refusals 4,
+bridge refusals 6, kit-only refusals 22, proves 2, contracts 2 written 5
+refused, rings 6 built 2 refused, differential 28 guest evals, runs 5.
