@@ -141,6 +141,74 @@ else
   call revert cast 1u "$c1" "$s1" "$s2" "$ix" "$iy"
 fi
 
+# The one-hot ballot proofs of examples/onehot.lang (S10 s1, Q-S10-1 (a)):
+# the words of `build/sigmatool words` (pk from blsag_key(5), ctx
+# blsag_key(23), k 2, choice 1). The intent-lang S7 port: each ecMul, ecAdd
+# and hash chain was confirmed there (2026-10-23, evm 1.14.12) with a direct
+# `evm run` to 0x..06, 0x..07 or a keccak code. z + 1 fails randOk, the
+# forged split of slot 0 (an encryption of 2) fails slotOk, and the split
+# maxWord + 2 = 1 (modulo 2^256) passes without the trap of u256Add.
+prog=examples/onehot.lang
+wctx=0x165d47d57adae4a13e25107baeb75afb447248ec79152ef9fad26eac97ba177eu
+wpkx=0x0968d432a7834f16726268caca7e1a398153743ee91bff7afa02f0ca6fdd1cefu
+wpky=0x1b03a01c8bb70557c6ae6cc0e854ca3f1ff99bf86a8c867437e1d654b8238854u
+s0c1x=0x0b32ee9502fbea21ed59bf4e9198cef815d87a58c9f30e87c950dc5faa0f5df8u
+s0c1y=0x1eab782fcf92ebbc712c3d3a89fcbb8859038df33c8c792ce2c240c9a14364edu
+s0c2x=0x1dc1189d0143f3bbf1196014d6ccb0d04189c26a0241d6338266428060556131u
+s0c2y=0x171be7a10d9c991e95d1a22d9d1d0917a9ff0590a872d7614179eb22bf20817fu
+s0a0x=0x25135c67b0307427422c6fe242eeeed17eb7945f8412c9277282da0125cdfeecu
+s0a0y=0x07b5b92c527d5fd666715fb20a6da4e625e4f150ab71549cec8146e291f0149au
+s0b0x=0x0606985761b99eaf9f2e80d64a21dcf2d89c1310e411395cdaf535e9d095eda3u
+s0b0y=0x035e3eacb3f7097011e82df135aff72cb88fdbc173ceadd77c897332419a27e9u
+s0a1x=0x1e88846757fb3f8b971ccab757f29a23f861358fc7425f889230ea4755764cb8u
+s0a1y=0x2f20e36c608268bfec51d1814b66c82acbd45c268e755a1f91472cbc1e65ccb9u
+s0b1x=0x2e8bda41bd08f2562e22cd58a9b90732a542662f331269ba72addfd02f983ee5u
+s0b1y=0x0d49abdac41195fb6b248647c9ad9010d9c25e1ea9146fdbdcb5b7f378cbb148u
+s0e0=0x6faeac6b62fe2c187afe5c4bb48022021fe4108eaa20c48090fdfebe2c7edf78u
+s0e1=0x0ef7d8fc7ba5b5aada617108f8009a0d400d74938749e744a5e44e08bee0c1f1u
+s0z0=0x134b833a9077298f8b4c871292751dbb6b6b5eb263ac0ca0bddad910930600adu
+s0z1=0x0964a8f24a8737cca4409c4ff3ad3307e27101709b88508d59061c42c22c50d7u
+s1c1x=0x1872c00f9a13d4ef35dedbbae4050f22038c055feaa32963d2923976b5d55e69u
+s1c1y=0x1db9f31831e6861aad480f5c7ebf778deda29d7bba582730418ee98499867e0fu
+sumc1x=0x2f87c2138b9a349174c49a78c8bf1b12ab7b639b953135c0063e1d3db5ed4294u
+sumc1y=0x12bb1fff7bfbf6d742d74adb8e0f9b9ca9e86c1cb64551cb59bd21303ef262f1u
+sumc2x=0x1f64eaba25542c7dee1b41bbe25b36b20713de4cdbaf1817883c7da1ba7290b5u
+sumc2y=0x2a88156a2bd65b8241108574ad3335797ffd995d8201836741ab5d53c593d25cu
+sumax=0x1357fdbc12f002c9350a6850f66d0f53a50eb71a0352ce19ce594259b19c32e5u
+sumay=0x0d9e5cad710ea83bd84be8c626488de680ed285cba48866813a8d3ee1fc4cbbdu
+sumbx=0x2c4716f2bfcfca295be12849d64d8d442780f1d27e452459825b85de8da52f28u
+sumby=0x1bee6e8a256611724dc7e3966b75945b4722c180e0de3d738d0d37ae803cf3ddu
+sumz=0x2943f4819ae982763e3016a5d6f4a54ba7ec3ed2939186bf6f51baa02ac06d30u
+sumzbad=0x2943f4819ae982763e3016a5d6f4a54ba7ec3ed2939186bf6f51baa02ac06d31u
+fc1x=0x13595f66a0a2e2d61015668c55f8bcd0288e619830ca19aa601f4f024821c75bu
+fc1y=0x2be3b092f87a4bb4f2d8a5246c14541f1ad0d730bf1591cf158b5772a13b4eb9u
+fc2x=0x02c60b6cb0a59f5546a6371be9833002bd69c38253e67ea53e294686e07bb00eu
+fc2y=0x052185f10c8b7838fdb0abf4279629523ece4f08bfd236765ef369beeb5f459cu
+fa0x=0x092033173cacce9202703314152285ae3a6d3c10c49438a7a2af8a8fd072f95eu
+fa0y=0x0b52cbce26803a3889d1c18d83c88d57c26d70b45d81abf3970b305b782d0946u
+fb0x=0x253c919fd3bb2ba6d2d2724f53ca60e350b4ae9d51639d825e25b34609c39649u
+fb0y=0x295f9276881af8976fb39112281cee6ce1a54f74989034850cdfc9ea375459c0u
+fa1x=0x136c7c5f4608b42851699653b678a174294b83051c934f5e47ccc177f769832eu
+fa1y=0x16cee4a2fc0b36f54460f7da5f06b6a96ff1762f2fe7d0f629f394551977891fu
+fb1x=0x221a789806ab05b0de16b97cb797dc21f13811a8bb43ff88fda988faa06730deu
+fb1y=0x129e7d4979010c9897e787f976e5a9633949b2816ec1ba2030cb7eba31612a7eu
+fe0=0x1f9db1de5bdcdf7689acd41f1944259d1709531bd6c420081a60b695e9a87738u
+fe1=0x0ecd2e5cb928db41d562959a119b5e280aae61e7b3e45ed566a6579bf4aed0d0u
+fz0=0x1155cee05885e4b13c009fc8a8a0493b2823c1febfc3daf50b33e1e0a6eb4841u
+fz1=0x20f0a7e0737ce8053f5d12c4b64a2251b04b38e2aad9cb1cc8f2f286d7904d06u
+if ! deploy "$prog"; then
+  echo "FAIL onehot deploy: $(head -n 1 "$tmp/dump")"
+  fail=$((fail + 1))
+else
+  call "out 1" randOk "$wctx" "$wpkx" "$wpky" "$sumc1x" "$sumc1y" "$sumc2x" "$sumc2y" 1u "$sumax" "$sumay" "$sumbx" "$sumby" "$sumz"
+  call "out 0" randOk "$wctx" "$wpkx" "$wpky" "$sumc1x" "$sumc1y" "$sumc2x" "$sumc2y" 1u "$sumax" "$sumay" "$sumbx" "$sumby" "$sumzbad"
+  call "out 1" slotOk "$wctx" 0u "$wpkx" "$wpky" "$s0c1x" "$s0c1y" "$s0c2x" "$s0c2y" "$s0a0x" "$s0a0y" "$s0b0x" "$s0b0y" "$s0a1x" "$s0a1y" "$s0b1x" "$s0b1y" "$s0e0" "$s0e1" "$s0z0" "$s0z1"
+  call "out 0" slotOk "$wctx" 0u "$wpkx" "$wpky" "$fc1x" "$fc1y" "$fc2x" "$fc2y" "$fa0x" "$fa0y" "$fb0x" "$fb0y" "$fa1x" "$fa1y" "$fb1x" "$fb1y" "$fe0" "$fe1" "$fz0" "$fz1"
+  call "out 1" splitView 1u 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffu 2u
+  call "out 2f87c2138b9a349174c49a78c8bf1b12ab7b639b953135c0063e1d3db5ed4294" sumX "$s0c1x" "$s0c1y" "$s1c1x" "$s1c1y"
+  call "out 12bb1fff7bfbf6d742d74adb8e0f9b9ca9e86c1cb64551cb59bd21303ef262f1" sumY "$s0c1x" "$s0c1y" "$s1c1x" "$s1c1y"
+fi
+
 # The written DAO contract (S9 B1): the text of `langc contract examples/dao.lang`.
 # The cast words come from `langc prove test/contract/ballots.lang NAME POLL`
 # (choice, c_1, s_1, s_2, I.x, I.y): the prove ring depends only on the Member

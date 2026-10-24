@@ -4026,10 +4026,15 @@ static uint32_t find_family(const Machine *m, const char *name);
 /* Rule O7 (S5, Q-S5-2 (a)). 1 if the core term T uses a law-only name: a
    law-only def, or an elim, a fold or a projection of a sealed family. The
    arguments of the type former TRUNC (Trunc1) are skipped: an end point
-   under Trunc1 comes out only into a proposition. */
-static int law_uses(const Machine *m, uint32_t trunc, const Core *t) {
+   under Trunc1 comes out only into a proposition. The argument of the
+   domain def ZKProof (ZKProof := Trunc1, S10 s1, O71) is skipped too: the
+   syntax type is walked before normalization, so ZKProof W is still an
+   application of the def there. */
+static int law_uses(const Machine *m, uint32_t trunc, uint32_t zk, const Core *t) {
   uint32_t i;
   if (t == NULL)
+    return 0;
+  if (t->kind == CORE_APP && t->a != NULL && t->a->kind == CORE_GLOBAL && t->a->index == zk)
     return 0;
   switch (t->kind) {
   case CORE_VAR:
@@ -4050,10 +4055,10 @@ static int law_uses(const Machine *m, uint32_t trunc, const Core *t) {
   case CORE_INEG:
   case CORE_IMEET:
   case CORE_IJOIN:
-    return law_uses(m, trunc, t->a) || law_uses(m, trunc, t->b);
+    return law_uses(m, trunc, zk, t->a) || law_uses(m, trunc, zk, t->b);
   case CORE_PATHP:
   case CORE_PAPP:
-    return law_uses(m, trunc, t->a) || law_uses(m, trunc, t->b) || law_uses(m, trunc, t->args[0]) || law_uses(m, trunc, t->args[1]);
+    return law_uses(m, trunc, zk, t->a) || law_uses(m, trunc, zk, t->b) || law_uses(m, trunc, zk, t->args[0]) || law_uses(m, trunc, zk, t->args[1]);
   case CORE_OP:
     break;
   }
@@ -4063,7 +4068,7 @@ static int law_uses(const Machine *m, uint32_t trunc, const Core *t) {
   if ((t->op == OP_FOLD_FAMILY && m->families[t->inst].sealed) || (t->op == OP_ELIM && t->field != 0u && m->families[t->field - 1u].sealed) || (t->op == OP_PROJ && m->families[m->ctors[t->inst].family].sealed))
     return 1;
   for (i = 0; i < t->argc; i++) {
-    if (law_uses(m, trunc, t->args[i]))
+    if (law_uses(m, trunc, zk, t->args[i]))
       return 1;
   }
   return 0;
@@ -4084,6 +4089,7 @@ static int check_def_body(Checker *c, const Decl *d, const Value *tv, const Core
   Machine *m = c->m;
   DefInfo *info = &m->defs[m->def_count];
   uint32_t trunc = find_family(m, "Trunc1");
+  uint32_t zk = find_def(m, "ZKProof");
   int program = d->origin == ORIGIN_PROGRAM;
   const Core *tc;
   int law;
@@ -4097,7 +4103,7 @@ static int check_def_body(Checker *c, const Decl *d, const Value *tv, const Core
   tc = program ? quote_value(m, c->level, tv) : NULL;
   if (program && tc == NULL)
     return FAIL(c, "OOM", "out of memory");
-  law = program ? law_uses(m, trunc, syntax_type) || law_uses(m, trunc, tc) || law_uses(m, trunc, body) : d->is_law;
+  law = program ? law_uses(m, trunc, zk, syntax_type) || law_uses(m, trunc, zk, tc) || law_uses(m, trunc, zk, body) : d->is_law;
   if (law && guest(c) && !law_type(m, c->level, trunc, tv))
     return FAIL(c, "REFUSE_LAW", "%s uses a law-only name (decrypt, observe, an elim, fold or projection of a sealed family) but its type is not a law (a Path or Trunc1 codomain); rule O7", d->name);
   info->name = d->name;

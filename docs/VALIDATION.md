@@ -329,3 +329,33 @@ the gas, and there is no cap.
 | 23 | EVM_SIZE | EVM_SIZE | | | | | | |
 | 28 | EVM_SIGNATURE | EVM_SIGNATURE | | | | | | |
 | 29 | EVM_RING (`langc contract`) | | | | | | | |
+
+## The one-hot cast (S10 s1)
+
+`examples/cast.lang` accepts a cast only when the ring signature, the
+fresh key image and the one-hot proofs are correct. The proofs are the
+port of intent-lang ef5abe8 (O71). Each slot proof is a disjunctive
+Chaum-Pedersen proof that the slot encrypts 0 or 1. The sum proof shows
+that the slots together encrypt 1.
+
+The split. A slot proof checks e0 + e1 = e modulo 2^256, not modulo r
+(intent-lang Q-S7-6 (a)). Thus special soundness has a slack of about
+3/r: two accepting transcripts with the same commitments and the
+challenges e and e' give e_b != e_b' mod r for some b, unless e - e' = c
+2^256 mod r for c in {-1, 0, 1}. For a fresh oracle e', that has a
+probability of about 3/r. `u256Add` traps on an overflow, and about one
+honest split in two wraps, thus `splitOk` of `examples/onehot.lang` uses
+no add (the rows `splitWrap` and `splitEdge`). The sigmatool rows "sigma
+OR forged split" and "sigma OR swapped slot index j" refuse a wrong
+split (M1, O73).
+
+The bound ctx. The proof context binds the key image and the poll
+(intent-lang O34): `ctxOf img n := hash (hash ix iy) n`. Thus a proof
+that is copied under the ring signature of another voter fails:
+`castCopy` gives 0. When `ctxOf` has no key image (M4), the literal
+proofs do not verify, and the check of `lawCast` refuses with PATH_END
+(O73). The ring signature signs `pollWord n p := hash (ballotPollOf n)
+p`, thus a ballot of another poll (`castOtherPoll`) or of another
+proposal (`castOtherProp`) gives 0. `ctWord` is the hash chain of the 8
+ciphertext coordinates, thus other ciphertexts with the same proofs
+(`castOtherCt`) give 0.

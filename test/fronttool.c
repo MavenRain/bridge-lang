@@ -48,7 +48,10 @@ static int law_guest(const char *text, const char *want) {
     "family Trunc1 (A : Type 0) := trunc1 (trunc1Of : A)\n"
     "  | squash1 (squash1X : Trunc1 A) (squash1Y : Trunc1 A) (i : I) [ ~i -> squash1X, i -> squash1Y ]\n"
     "sealed family Enc (A : Type 0) := encEta (encOf : A)\n"
-    "law def decrypt : (A : Type 0) -> Enc A -> A := fun A c => fold (fun a => a) c\n",
+    "law def decrypt : (A : Type 0) -> Enc A -> A := fun A c => fold (fun a => a) c\n"
+    "def ZKProof : Type 0 -> Type 0 := fun W => Trunc1 W\n"
+    "sealed family Transcript (W : Type 0) := transcript (transcriptOf : W)\n"
+    "law def verified : (W : Type 0) -> Transcript W -> ZKProof W := fun W t => trunc1 W (elim (fun u => W) (fun w => w) t)\n",
     text, ORIGIN_PROGRAM, CHECK_GUEST, want);
 }
 
@@ -602,6 +605,13 @@ int main(void) {
                   "Path ((fun (_ : Size) => Size) (lawBody c @ i0)) sz0 sz0 -> Size := fun c p => sz0", "REFUSE_LAW");
   ok &= law_guest("def truncatedCarrier : (c : Enc Size) -> "
                   "Trunc1 (Path ((fun (_ : Size) => Size) (decrypt Size c)) sz0 sz0) -> Size := fun c p => sz0", NULL);
+  /* ZKProof, Transcript and verified (S10 s1, rule O7): a decrypt in the
+     argument of ZKProof is not law-only, and a program def cannot take the
+     name of the law def verified or of the family Transcript. */
+  ok &= law_guest("def openedZK : (c : Enc Size) -> ZKProof (Path Size (decrypt Size c) sz0) -> Size :=\n"
+                  "  fun c p => sz0", NULL);
+  ok &= law_guest("def verified : Size := sz0", "REFUSE_NAME");
+  ok &= law_guest("def Transcript : Size := sz0", "REFUSE_NAME");
   /* The generated names are R4 names: a bisimulation name, a destructor
      name and a corecursor name that an earlier def holds are refused. */
   ok &= domain("def StrmBisim : Type 1 := Type 0\n"

@@ -145,6 +145,17 @@ law def decrypt : (A : Type 0) -> Enc A -> A :=
   fun (A : Type 0) (c : Enc A) => fold (fun (a : A) => a) c
 law def observe : (A : Type 0) -> Enc A -> Trunc1 A :=
   fun (A : Type 0) (c : Enc A) => trunc1 A (decrypt A c)
+-- ZKProof and Transcript (S10 s1, Q-S10-1 (a), rule O7). A proof of W
+-- is the truncation of W, and zero knowledge is the squash1 cell. ZKProof
+-- is a def, not a family. The O7 walk skips the argument of ZKProof, as it
+-- skips the argument of Trunc1. In the ideal model a Transcript holds its
+-- witness, as an Enc holds its plaintext. verified is a law def, as
+-- observe. A failed check is a host refusal or a chain revert, so the
+-- codomain is not an Option.
+def ZKProof : Type 0 -> Type 0 := fun (W : Type 0) => Trunc1 W
+sealed family Transcript (W : Type 0) := transcript (transcriptOf : W)
+law def verified : (W : Type 0) -> Transcript W -> ZKProof W :=
+  fun (W : Type 0) (t : Transcript W) => trunc1 W (elim (fun (u : Transcript W) => W) (fun (w : W) => w) t)
 -- The positions of a bag (S7 B3, Q4): Pos n has n values, the first
 -- position at each szS and a lift of each position of the tail. No
 -- constructor gives Pos sz0. A domain family, so Fin stays internal (O23).

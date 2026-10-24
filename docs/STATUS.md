@@ -677,3 +677,87 @@ The host counts do not change: runs 5, differential 14 host runs, run
 refusals 10, asmtool 8 checks, builds 3, lower refusals 16, build checks
 33, dispatch 20 checks, evm steps 43, differential 14 EVM rows,
 precompile 128 steps, mock 13 rows, diff 15 rows.
+
+## S10 s1
+
+Slice S10 s1 (the port of the intent-lang S7 one-hot proof and the
+signed encrypted cast, PLAN 4.6, Q-S10-1 (a), Q-S10-4 (a) and Q-S10-7
+(a)) is complete. The change is not committed; its base is the USER
+commit 76af1b9 on 174f975 (tree b9f6b6b3, the S9 s2 tree with the O69
+review fixes). The gate `make check` is GREEN, exit 0. There is a src
+change (`src/front/sigma.c`, `src/front/sigma.h`, `src/front/check.c`)
+and a domain change (`ZKProof`, `Transcript`, `verified`).
+
+Changes (O70 to O74):
+
+- `src/front/sigma.c` and `src/front/sigma.h` (new): the one-hot Sigma
+  proofs of intent-lang ef5abe8 on bn254, with `hash2` in place of the
+  intent-lang `thr_hash` (O71).
+- `src/front/check.c`: the walk of `law_uses` does not go into the
+  argument of `ZKProof` (O71).
+- `domain/domain.lang`: `ZKProof W := Trunc1 W`, the sealed family
+  `Transcript` and `law def verified` (O71).
+- `examples/zkproof.lang` (new) and `examples/onehot.lang` (new, kit, a
+  row of `examples/kit.txt`): the ported ZK examples (O71).
+- `examples/cast.lang` (new, kit, a row of `examples/kit.txt`): the
+  signed encrypted cast `castW`, the typed `castTyped`, the law
+  `lawCast`, the bound ctx `ctxOf` and the poll word `pollWord` (O72).
+- `test/sigmatool.c` (new, `build/sigmatool`, a `Makefile` target and a
+  `make check` step): the ported sigma rows and the `cast` mode that
+  prints the S10 ballot words (O71, O72).
+- `test/elgamaltool.c`: the two tally rows (Q-S9-4 (b), O72).
+- `test/check/zk-leak.lang` (REFUSE_LAW) and
+  `test/check/transcript-state.lang` (REFUSE_STATE, also a row of
+  `test/check/kit.txt`): new check rows (O71).
+- `test/fronttool.c`: 3 rows for `ZKProof`, `Transcript` and `verified`
+  (O71).
+- `test/precompile.sh`: the onehot block, 7 steps (O71).
+- `test/eval/expect.txt`: 21 new rows: 9 port rows and 12 `cast` rows
+  (O71, O72).
+
+Traps found in S10 s1:
+
+- `langc --kit eval` prints U256 words in decimal, thus a search for
+  `0x` words in its output finds none. The key image check compares
+  the decimal words (O72).
+- The port script applied the precompile hunk with `-C1` before the
+  zkcast block. The onehot block was moved by hand to after the zkcast
+  block (O71).
+- `langc --kit check examples/cast.lang` takes about 14 s, because
+  `lawCast` and `typed1` evaluate `castOk` at check time. Each `cast`
+  eval row takes about the same time.
+- The M5 mutant must remove both slot 1 C2 words from `ctWord`. When
+  only the last hash is removed, C2 x stays in the chain. `wSlot1C2`
+  changes x and y, thus the row stays 0 and does not test the mutant
+  (O73).
+- M4 (`ctxOf` with no key image) stops at check time: `lawCast` gives
+  PATH_END. Thus `lawCast` is the check row of M4, and no eval row is
+  necessary (O73).
+- The bound ctx cite is intent-lang O34. PLAN O34 is Q-S7-2 (a). The
+  record fixed the cite in `cast.lang` and `test/sigmatool.c` (O74).
+- The review of the staged slice fixed the `law_uses` comment of
+  `check.c` (def name `ZKProof`, cite S10 s1 and O71, not the
+  intent-lang "S7, Q-S7-1 (a)") and the `hash2` count of O71 (12 calls
+  and 3 comment lines of sigma.c, not 15 calls and 1 comment) (O74).
+
+| Count | S9 s2 | S10 s1 | Reason |
+|---|---|---|---|
+| examples | 54 | 57 | `zkproof.lang`, `onehot.lang`, `cast.lang` |
+| parse refusals | 19 | 19 | no new parse row |
+| check refusals | 191 | 193 | `zk-leak.lang` (REFUSE_LAW), `transcript-state.lang` (REFUSE_STATE) |
+| pool refusals | 4 | 4 | no new pool row |
+| bridge refusals | 6 | 6 | no new bridge row |
+| kit-only refusals | 22 | 22 | no new `REFUSE_KIT` row |
+| evals | 314 | 335 | 9 port rows, 12 `cast` rows |
+| proves | 2 | 2 | no new prove row |
+| contracts | 2 written, 5 refused | 2 written, 5 refused | no contract change |
+| rings | 6 built, 2 refused | 6 built, 2 refused | no ring change |
+| differential | 28 guest evals | 28 guest evals | no new differential row |
+
+The host counts change in one place: precompile 128 to 135 steps (the
+onehot block). The new host rows are `build/sigmatool` ("sigma
+regressions: passed") and the two elgamaltool tally rows. The other
+host counts do not change: runs 5, differential 14 host runs, run
+refusals 10, asmtool 8 checks, builds 3, lower refusals 16, build
+checks 33, dispatch 20 checks, evm steps 43, differential 14 EVM rows,
+mock 13 rows, diff 15 rows.

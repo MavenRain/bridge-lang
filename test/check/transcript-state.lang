@@ -1,0 +1,4 @@
+-- REFUSE_STATE (S10 s1, Q-S10-1 (a)): Transcript is a sealed family with no chain
+-- form (the chain takes a proof as words), so a state field of type
+-- Transcript Size is refused.
+state State := makeState (held : U256) (board : Transcript Size)

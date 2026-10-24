@@ -94,3 +94,4 @@ enc-state.lang
 ballot-twice.lang
 ballot-poll.lang
 enact-twice.lang
+transcript-state.lang

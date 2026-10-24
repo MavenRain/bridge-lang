@@ -37,3 +37,5 @@ enc-ideal.lang
 tally-ideal.lang
 enact.lang
 ballot.lang
+onehot.lang
+cast.lang

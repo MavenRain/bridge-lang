@@ -10,6 +10,7 @@ TOOL = test/asmtool.c $(TARGET) src/keccak.c
 FRONT_TOOL = test/fronttool.c $(filter-out src/front/front.c,$(FRONT))
 BLSAG_TOOL = test/blsagtool.c src/front/u256.c src/front/bn254.c src/front/blsag.c src/keccak.c
 ELGAMAL_TOOL = test/elgamaltool.c src/front/u256.c src/front/bn254.c src/front/blsag.c src/front/elgamal.c src/keccak.c
+SIGMA_TOOL = test/sigmatool.c src/front/u256.c src/front/bn254.c src/front/blsag.c src/front/elgamal.c src/front/sigma.c src/keccak.c
 PATH_TOOL = test/pathtool.c $(filter-out src/front/front.c,$(FRONT))
 RUN_TOOL = test/runtool.c $(FRONT)
 WRITER_TOOL = test/writertool.c $(FRONT) src/front/writer.c
@@ -22,7 +23,7 @@ HEADERS = $(wildcard src/*.h src/front/*.h)
 
 .PHONY: build check check-clang clean
 
-build: build/langc build/asmtool build/fronttool build/blsagtool build/elgamaltool build/pathtool build/runtool build/writertool build/slottool build/buildtool build/lowertool build/evmtool build/emittool
+build: build/langc build/asmtool build/fronttool build/blsagtool build/elgamaltool build/sigmatool build/pathtool build/runtool build/writertool build/slottool build/buildtool build/lowertool build/evmtool build/emittool
 
 build/domain.c: domain/domain.lang gen/embed.c
 	mkdir -p build
@@ -46,6 +47,10 @@ build/blsagtool: $(BLSAG_TOOL) $(HEADERS)
 build/elgamaltool: $(ELGAMAL_TOOL) $(HEADERS)
 	mkdir -p build
 	$(TCC) $(CFLAGS) -o build/elgamaltool $(ELGAMAL_TOOL)
+
+build/sigmatool: $(SIGMA_TOOL) $(HEADERS)
+	mkdir -p build
+	$(TCC) $(CFLAGS) -o build/sigmatool $(SIGMA_TOOL)
 
 build/pathtool: $(PATH_TOOL) $(HEADERS)
 	mkdir -p build
@@ -82,6 +87,7 @@ check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(FRONT_TOOL)
 	$(CC) $(CLANG_FLAGS) $(BLSAG_TOOL)
 	$(CC) $(CLANG_FLAGS) $(ELGAMAL_TOOL)
+	$(CC) $(CLANG_FLAGS) $(SIGMA_TOOL)
 	$(CC) $(CLANG_FLAGS) $(PATH_TOOL)
 	$(CC) $(CLANG_FLAGS) $(RUN_TOOL) build/domain.c
 	$(CC) $(CLANG_FLAGS) $(WRITER_TOOL) build/domain.c
@@ -91,7 +97,7 @@ check-clang: build/domain.c
 	$(CC) $(CLANG_FLAGS) $(EMIT_TOOL)
 	$(CC) $(CLANG_FLAGS) $(EVM_TOOL)
 
-check: build/langc build/asmtool build/fronttool build/blsagtool build/elgamaltool build/pathtool build/runtool build/writertool build/slottool build/buildtool build/lowertool build/evmtool build/emittool check-clang
+check: build/langc build/asmtool build/fronttool build/blsagtool build/elgamaltool build/sigmatool build/pathtool build/runtool build/writertool build/slottool build/buildtool build/lowertool build/evmtool build/emittool check-clang
 	sh test/gate.sh
 	sh test/run.sh
 	sh test/asm.sh
@@ -105,6 +111,7 @@ check: build/langc build/asmtool build/fronttool build/blsagtool build/elgamalto
 	build/fronttool
 	build/blsagtool
 	build/elgamaltool
+	build/sigmatool
 	build/pathtool
 	build/runtool
 	build/writertool

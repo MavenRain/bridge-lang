@@ -189,3 +189,5 @@ tally-proof.lang TYPE_MISMATCH
 ballot-twice.lang PATH_END
 ballot-poll.lang PATH_END
 enact-twice.lang PATH_END
+zk-leak.lang REFUSE_LAW
+transcript-state.lang REFUSE_STATE

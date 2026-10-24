@@ -1,5 +1,6 @@
 /* Host ElGamal regressions (slice S5 b5): the round trip, the sum and the
-   scale of ciphertexts, and the refusals of front/elgamal.c. With the two
+   scale of ciphertexts, the tally of three one-hot ballots (slice S10 s1)
+   and the refusals of front/elgamal.c. With the two
    arguments BITS M it decrypts one ciphertext of M by a search of BITS bits
    and prints the result (the timing run of docs/VALIDATION.md). */
 #include <stdio.h>
@@ -69,6 +70,21 @@ int main(int argc, char **argv) {
   fe_from_u64(&bad.c1.x, 1u);
   fe_from_u64(&bad.c1.y, 3u);
   ok &= row("off-curve C1 refused", &sk, &bad, 16u, ELG_REFUSED, 0u);
+  /* The tally (slice S10 s1, map D3): the ballots (1, 0), (0, 1) and
+     (1, 0), one ciphertext per slot, added by elg_add per slot, open to
+     (2, 1). */
+  encrypt_u64(&a, &pk, 1u, 9u);
+  encrypt_u64(&b, &pk, 0u, 11u);
+  elg_add(&sum, &a, &b);
+  encrypt_u64(&b, &pk, 1u, 13u);
+  elg_add(&a, &sum, &b);
+  ok &= row("tally slot 0", &sk, &a, 16u, ELG_FOUND, 2u);
+  encrypt_u64(&a, &pk, 0u, 10u);
+  encrypt_u64(&b, &pk, 1u, 12u);
+  elg_add(&sum, &a, &b);
+  encrypt_u64(&b, &pk, 0u, 14u);
+  elg_add(&a, &sum, &b);
+  ok &= row("tally slot 1", &sk, &a, 16u, ELG_FOUND, 1u);
   if (!ok)
     return 1;
   puts("elgamal regressions: passed");

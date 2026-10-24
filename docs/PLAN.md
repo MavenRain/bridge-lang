@@ -372,7 +372,7 @@ The ring size bounds the gas of `claim` (O17).
 | S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | s1 DONE (2026-10-23), the guest side (Q-S7-1 (a)): examples 46, parse refusals 19, check refusals 174, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 217, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the host and precompile rows wait for intent-lang S5 and S6 (O33); s2 DONE (2026-10-23), the port of intent-lang 1b65dec (the sealed `Enc`, the law-only `decrypt` and the host ElGamal) and the Q-S3-2 (a) item (O53 to O58, Q-S7-3 (a)): examples 50, parse refusals 19, check refusals 185, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 267, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the precompile rows wait for the port of intent-lang S6 9b99528 (O33) |
 | S8 | `ZKBridge` as the mapping cylinder; `ZKBridge ≃ BridgeState`; bLSAG claim rings and key images | DONE (2026-10-23), the guest side (Q-S8-1 (a) to Q-S8-4 (a)): examples 47, parse refusals 19, check refusals 175, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 237, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; no src change and no domain change (O38 to O43) |
 | S9 | Part D: encrypted ballots, `tallyEnc`, the tally law, liquidity Decisions, the remote enactment | DONE (2026-10-24), Part D is closed. s1 DONE (2026-10-23), the tally, the tally law and the liquidity Decisions (Q-S9-1 (a), Q-S9-2 (a)): examples 52, parse refusals 19, check refusals 188, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 277, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s1 has no src change and no domain change (O59 to O63). s2 DONE (2026-10-24), the remote enactment and the signed ballot in the kit examples `examples/enact.lang` and `examples/ballot.lang` (Q-S9-3 (a), Q-S9-4 (b)): examples 54, parse refusals 19, check refusals 191, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 314, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s2 has no src change and no domain change (O64 to O68) |
-| S10 | The contract of section 7: writer, two-deployment differential, gas and size rows | PLANNED |
+| S10 | The contract of section 7: writer, two-deployment differential, gas and size rows | s1 DONE (2026-10-24), the port of the intent-lang S7 one-hot proof (ef5abe8, Q-S10-1 (a)) and the signed encrypted cast in the kit example `examples/cast.lang` (Q-S10-4 (a), Q-S10-7 (a)): examples 57, parse refusals 19, check refusals 193, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 335, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures, precompile 135 steps; s1 has a src change (`src/front/sigma.c`, `src/front/sigma.h`, the ZK walk skip of `src/front/check.c`) and a domain change (`ZKProof`, `Transcript`, `verified`) (O70 to O74); s2 (the contract) is PLANNED |
 | S11 | Mutants and close | PLANNED |
 
 ## 10. Open items
@@ -915,6 +915,90 @@ The ring size bounds the gas of `claim` (O17).
   invalid and rounded liquidity, independent poll state, and reserve
   guards on both state projections. The s2 totals after review are
   191 check refusals and 314 evals.
+- O70: S10 Step 0 (2026-10-24). The base is the USER commit 76af1b9
+  on 174f975 ("Add remote enactment and ring-signed ballots"). Its
+  tree b9f6b6b3 is not the staged S9 s2 tree 4b7bd053: the USER edit
+  of O69 changes 10 files (+444/-56). The S9 s2 totals after O69 are
+  191 check refusals and 314 evals. intent-lang HEAD is ef5abe8. The
+  baseline (`make clean`, then `make check`) is GREEN, exit 0:
+  examples 54, parse refusals 19, check refusals 191, pool refusals
+  4, bridge refusals 6, kit-only refusals 22, evals 314, proves 2,
+  precompile 128 steps. Q-S7-3 (a), Q-S9-1 (a), Q-S9-2 (a), Q-S9-3
+  (a) and Q-S9-4 (b) are taken and wait for the USER ruling. Q-S9-4
+  (b) moves the host tally row to S10 s1 (O72).
+- O71: S10 s1, the port of the intent-lang S7 one-hot proof
+  (intent-lang ef5abe8, Q-S10-1 (a), O15: the work is done once). The
+  port takes the parts that are not secp256k1. The src change:
+  `src/front/sigma.c` and `src/front/sigma.h` (the OR proof of each
+  slot and the sum proof on bn254), and the ZK walk skip of
+  `law_uses` in `src/front/check.c` (5 hunks): the walk does not go
+  into the argument of `ZKProof`, thus a program def can state a ZK
+  proof about `decrypt` (rule O7). The 12 `thr_hash` calls and the 3
+  comment lines of sigma.c (16 names on 15 lines) and the 5 comment
+  lines of sigma.h use `hash2`, and no `thr_` name stays. The domain
+  change (11 lines, as intent-lang Q-S7-1 and Q-S7-2 (a)): `ZKProof W
+  := Trunc1 W`, the sealed family `Transcript` and `law def verified`.
+  The examples: `examples/zkproof.lang` and `examples/onehot.lang`
+  (kit, a row of `examples/kit.txt`). The rows: `test/sigmatool.c`
+  ("sigma regressions: passed"), `test/check/zk-leak.lang`
+  (REFUSE_LAW), `test/check/transcript-state.lang` (REFUSE_STATE, also
+  a row of `test/check/kit.txt`), 3 fronttool rows, 9 eval rows and
+  the precompile onehot block (7 steps, 128 to 135). The 63 proof
+  words of sigmatool are the literals of `onehot.lang`: there is no
+  difference. The port script applied the precompile hunk with `-C1`
+  before the zkcast block; it was moved by hand to after that block.
+- O72: S10 s1, the host rows and the signed encrypted cast (PLAN 4.6,
+  Q-S9-3 (a), Q-S9-4 (b), Q-S10-4 (a), Q-S10-7 (a)). The elgamaltool
+  tally rows: slot 0 encrypts 1, 0 and 1, slot 1 encrypts 0, 1 and 0,
+  and `elg_add` of each slot gives "tally slot 0" 2 and "tally slot 1"
+  1. `build/sigmatool cast` prints the S10 ballot words for the key 7
+  (Q-S10-4 (a)): 3 voters, the ring `blsag_key(v) G`, the key image
+  of each voter (the last two words of `blsag_sign`), ctx =
+  hash2(hash2(ix, iy), 1), the choices 0, 1 and 0, and a forged slot
+  0 (an encryption of 2) that gives SIG_BAD_SLOT. The ported default
+  vectors (blsag_key 5) stay for the 9 port rows. The guest key image
+  agrees with the host: `langc --kit eval examples/ballot.lang sv0`
+  prints the words in decimal, and its last two words are ix and iy
+  of the host. The kit example `examples/cast.lang` (a row of
+  `examples/kit.txt`) joins three parts in one Flag: the ring
+  signature of `ballot.lang` over `ctWord` (the hash chain of the 8
+  ciphertext coordinates, Q-S9-3 (a)), a fresh key image, and the
+  one-hot proofs at `ctxOf img n := hash (hash ix iy) n` (intent-lang
+  O34). The ring signs `pollWord n p := hash (ballotPollOf n) p`,
+  which binds the proposal word (Q-S10-7 (a)). `castW` adds each slot
+  to the tally with `elgAdd` and adds the key image to the spent list
+  of the poll. `lawCast` is refl. The 12 hand-written `cast` eval rows
+  agree with the first run: the three casts give 1; the duplicate key
+  image, another poll, another proposal, the forged slot, a copied
+  proof, other ciphertexts and `wSlot1C2` give 0; the two tally rows
+  give 1 (slot 0 opens to 2 and slot 1 opens to 1).
+- O73: the hand mutants of S10 s1, on scratch copies. The runner
+  copies each file first, rebuilds with `make -B`, and restores each
+  file with `cp` and `cmp`. All 6 are KILLED. M1 (`sig_or_verify`
+  with no e0 + e1 check): the sigmatool rows "sigma OR forged split"
+  and "sigma OR swapped slot index j" FAIL. M2 (no ZK walk skip in
+  `law_uses`): the check of `zkproof.lang` refuses with REFUSE_LAW
+  (rule O7), and the fronttool row `openedZK` FAILS; with no mutant,
+  the check gives ok. M3 (`castNext` with no `cons` of the key image):
+  `castDup` changes from 0 to 1. M4 (`ctxOf` with no key image): check
+  refuses `lawCast` with PATH_END, thus each `cast` eval row stops;
+  `lawCast` is the check row of M4. M5 (`ctWord` with 5 hashes, with
+  no slot 1 C2 x and y): `wSlot1C2` changes from 0 to 1, and
+  `castFirst` stays 1, because `zkSign` and `zkVerify` both move. M6
+  (the second elgamaltool ballot is (1, 0)): the rows "tally slot 0"
+  and "tally slot 1" FAIL. No mutant lived, thus there is no new check
+  or eval row.
+- O74: the builder calls of S10 s1. There is no builder call: the main
+  loop built S10 s1 by hand (USER ruling 10-05, as in O62 and O68), in
+  5 sessions: the baseline and the port script, the port and the host
+  rows, `cast.lang` and the gate, the mutants, and the record. The
+  record fixed a wrong cite: `cast.lang` and `test/sigmatool.c` gave
+  `(O34)` for the bound ctx, but PLAN O34 is Q-S7-2 (a). The bound ctx
+  is intent-lang O34. The review of the staged slice (2026-10-24) fixed
+  two more record errors: the `law_uses` comment of `check.c` gave the
+  def name `ZK` and the intent-lang cite "S7, Q-S7-1 (a)" (now
+  `ZKProof`, S10 s1, O71), and O71 gave "15 calls and 1 comment" for
+  the 12 calls and 3 comment lines of sigma.c.
 
 ## 11. Questions for the USER (S1)
 
@@ -1188,3 +1272,52 @@ Q-S9-1 (a) and Q-S9-2 (a) are taken. They wait for the USER ruling.
   row first.
 
 Q-S9-3 (a) and Q-S9-4 (b) are taken. They wait for the USER ruling.
+
+### S10 questions (OPEN)
+
+- Q-S10-1 (the port scope). (a) port the parts of intent-lang ef5abe8
+  that are not secp256k1: the check.c walk skip, sigma.{c,h}, the 11
+  domain.lang lines (a domain change, as intent-lang Q-S7-1 and Q-S7-2
+  (a)), zkproof.lang, onehot.lang, and the check, eval, fronttool and
+  precompile rows. RECOMMENDED, taken (O71). (b) kit only: onehot.lang
+  and the sigma host, no domain ZKProof (the contract checks Flags
+  only).
+- Q-S10-2 (the contract route). (a) a hand-written kit contract
+  `examples/twin.lang` built by `langc --kit build`; the writer `langc
+  contract` stays the DAO table writer, unchanged. RECOMMENDED, for
+  s2. (b) writer.c writes the 7 entries from the guest programs (a
+  large src change).
+- Q-S10-3 (the cast arity). (a) the contract splits cast: `castSlot`
+  (k calls, one OR proof each at the bound ctx) then `cast` (ring
+  signature, sum proof, tally add); no src change; one entry more than
+  PLAN 7. RECOMMENDED, for s2. (b) raise EVM_SIGNATURE (evm.c:12,
+  lower.c:169) and keep one `cast` of about 43 words (a src change; s2
+  probes the stack depth).
+- Q-S10-4 (the committee key). (a) key 7 (elgamal.lang and enact.lang)
+  for ElGamal, the opening and the attest (O13); test/sigmatool.c gets
+  a `cast` mode that prints the S10 ballot proofs for key 7 at the
+  bound ctx; the ported default vectors (blsag_key 5) stay for the 9
+  port rows. RECOMMENDED, taken (O72). (b) recompute the elgamal and
+  enact literals for blsag_key 5.
+- Q-S10-5 (the side value). (a) a src change: `init` takes the side as
+  a constructor argument (lower.c:931 reads it from the initcode
+  tail), evmchain.sh appends the word, and `langc --kit run` takes it
+  in the script; s2 probes it first. RECOMMENDED (PLAN 7), for s2. (b)
+  a one-shot `setSide` entry (kit only; a deployment race). (c) two
+  `init` constants (two bytecodes, against PLAN 7).
+- Q-S10-6 (the seal bound). (a) `seal` needs `now` >= the stored bound
+  (Env `now`, no prelude change). RECOMMENDED, for s2. (b) a block
+  number in Env (a prelude and lower change).
+- Q-S10-7 (the proposal and close). (a) the poll word binds the
+  proposal word p (`pollWord n p`); the first `cast` of poll n stores
+  p, later casts must match; `close j m D1 P1 D2 P2` opens one choice
+  slot per call (two shares with DLEQ proofs, `lag12`, the `m G`
+  check) and the last slot stores the Decision word (p when yes
+  reaches the level, else keep); `enact` checks `decisionWord d`
+  against it (home) or the attest (remote). RECOMMENDED; s1 takes the
+  poll word (O72), s2 takes the stored p and `close`. (b) a `propose`
+  entry and one `close` with all slots (above the arity limit).
+
+Q-S10-1 (a), Q-S10-4 (a) and the poll word of Q-S10-7 (a) are taken.
+Q-S10-2, Q-S10-3, Q-S10-5, Q-S10-6 and the rest of Q-S10-7 are for s2.
+They wait for the USER ruling.
