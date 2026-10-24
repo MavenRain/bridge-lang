@@ -32,3 +32,4 @@ zkcast.lang
 pool.lang
 bridge.lang
 elgamal.lang
+trace.lang

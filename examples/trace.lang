@@ -1,0 +1,168 @@
+-- S4 Part 2 (PLAN 4.1, 4.4, section 5): Trace, its category laws, the meaning functor and Stream of batches.
+-- The pool word functions are copied from examples/pool.lang (the Q-S6-1 (a) pattern).
+-- The kit has no multiply and no divide on U256, so folds over the powers of two give them.
+-- u256Add traps on an overflow. u256Sub stops at 0.
+
+def top : U256 := 0x8000000000000000000000000000000000000000000000000000000000000000u
+def wMax : U256 := 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffu
+def bound : U256 := 0xffffffffffffffffffffffffffffffffu
+
+-- The 256 powers of two, the smallest first. The step stops at 2^255, so no word overflows.
+def pows : List U256 := unfold (fun (p : U256) => some (pair p (flagIf (u256Eq p top) p (u256Add p p)))) 256 1u
+
+-- powsAt a b is pows when a and b are words. For an open a or b it does not reduce, so a fold over it
+-- stops at once. Without it, a type with an open product makes a normal form of exponential size.
+def powsAt : U256 -> U256 -> List U256 := fun (a b : U256) => flagIf (u256Eq a a) (flagIf (u256Eq b b) pows nil) nil
+
+-- zeroTrap d is 0. It traps when d is 0.
+def zeroTrap : U256 -> U256 := fun (d : U256) => u256Sub (u256Add wMax (flagIf (u256Eq d 0u) 1u 0u)) wMax
+
+-- mul a b reads the bits of b from the top (the fold starts at the last power). A product of 2^256 or more traps.
+def mulBit : (a p acc rest : U256) -> Prod U256 U256 := fun (a p acc rest : U256) =>
+  flagIf (u256Le p rest) (pair (u256Add (u256Add acc acc) a) (u256Sub rest p)) (pair (u256Add acc acc) rest)
+def mul : U256 -> U256 -> U256 := fun (a b : U256) =>
+  first (fold (fun (p : U256) (s : Prod U256 U256) => mulBit a p (first s) (second s)) (pair 0u b) (powsAt a b))
+
+-- divFloor n d is the long division of n by d. The state is the quotient, the rest and the bits of n not read.
+-- d must be below 2^255. A divisor of 0 traps.
+def divNext : (d p q rem rest : U256) -> Prod U256 (Prod U256 U256) := fun (d p q rem rest : U256) =>
+  flagIf (u256Le d rem) (pair (u256Add q p) (pair (u256Sub rem d) rest)) (pair q (pair rem rest))
+def divBit : (d p q rem rest : U256) -> Prod U256 (Prod U256 U256) := fun (d p q rem rest : U256) =>
+  flagIf (u256Le p rest) (divNext d p q (u256Add (u256Add rem rem) 1u) (u256Sub rest p)) (divNext d p q (u256Add rem rem) rest)
+def divFloor : U256 -> U256 -> U256 := fun (n d : U256) =>
+  u256Add (zeroTrap d) (first (fold (fun (p : U256) (s : Prod U256 (Prod U256 U256)) =>
+    divBit d p (first s) (first (second s)) (second (second s))) (pair 0u (pair 0u n)) (powsAt n d)))
+def divCeil : U256 -> U256 -> U256 := fun (n d : U256) =>
+  u256Add (divFloor n d) (flagIf (u256Eq (mul (divFloor n d) d) n) 0u 1u)
+
+-- The overflow bound (O7): capped r is r when r is below 2^128. Else it traps.
+def capped : U256 -> U256 := fun (r : U256) => flagIf (u256Le r bound) r (u256Add wMax r)
+
+-- Check the whole result before exposing either coordinate. A check inside just one
+-- field can be skipped by projecting the other field in the lazy evaluator.
+def badReserves : Prod U256 U256 := pair (u256Add wMax 1u) (u256Add wMax 1u)
+def checkedReserves : U256 -> U256 -> Prod U256 U256 := fun (x y : U256) =>
+  flagIf (u256Le 1u x) (flagIf (u256Le x bound)
+    (flagIf (u256Le 1u y) (flagIf (u256Le y bound) (pair x y) badReserves) badReserves) badReserves) badReserves
+
+-- swapIn (PLAN 4.2): dx goes in, floor (y * dx / (x + dx)) goes out.
+def outIn : (x y dx : U256) -> U256 := fun (x y dx : U256) => divFloor (mul y dx) (u256Add x dx)
+def swapInW : (x y dx : U256) -> Prod U256 U256 := fun (x y dx : U256) => checkedReserves (u256Add x dx) (u256Sub y (outIn x y dx))
+
+-- swapOut (PLAN 4.2): c goes out, ceil (x * c / (y - c)) goes in. The proof says c < y.
+def inOut : (x y c : U256) -> U256 := fun (x y c : U256) => divCeil (mul x c) (u256Sub y c)
+def swapOutW : (x y c : U256) -> Prod U256 U256 := fun (x y c : U256) => checkedReserves (u256Add x (inOut x y c)) (u256Sub y c)
+
+def addLiqW : (x y dx dy : U256) -> Prod U256 U256 := fun (x y dx dy : U256) => checkedReserves (u256Add x dx) (u256Add y dy)
+
+-- claim (PLAN 4.4, destination side), copied from examples/bridge.lang.
+def claimW : (x y c : U256) -> Prod U256 U256 := fun (x y c : U256) => checkedReserves (u256Sub x (outIn y x c)) (u256Add y c)
+
+-- Trace (PLAN 4.1, O5, Q2 (a)). W is the reserve words. A step is one of four kinds:
+-- swapIn dx, swapOut c, addLiq (dx, dy) and claim c (the bridge).
+def W : Type 0 := Prod U256 U256
+def Step : Type 0 := Sum U256 (Sum U256 (Sum W U256))
+-- The word functions rely on proofs supplied by the public pool operations.
+-- A trace stores words, so check those preconditions before returning a result.
+def swapInStepW : (x y dx : U256) -> W := fun (x y dx : U256) =>
+  flagIf (u256Le 1u dx) (swapInW x y dx) badReserves
+def addLiqStepW : (x y dx dy : U256) -> W := fun (x y dx dy : U256) =>
+  flagIf (u256Le 1u dx) (flagIf (u256Le 1u dy)
+    (flagIf (u256Le (mul dx y) (mul dy x))
+      (flagIf (u256Le (u256Add (mul dy x) 1u) (u256Add (mul dx y) x))
+        (addLiqW x y dx dy) badReserves) badReserves) badReserves) badReserves
+def stepW : Step -> W -> W := fun (s : Step) (r : W) =>
+  elim (fun (t : Step) => W) (fun (dx : U256) => swapInStepW (first r) (second r) dx)
+    (fun (u : Sum U256 (Sum W U256)) => elim (fun (t : Sum U256 (Sum W U256)) => W)
+      (fun (c : U256) => swapOutW (first r) (second r) c)
+      (fun (v : Sum W U256) => elim (fun (t : Sum W U256) => W)
+        (fun (d : W) => addLiqStepW (first r) (second r) (first d) (second d))
+        (fun (c : U256) => claimW (first r) (second r) c) v) u) s
+
+-- Trace is the free monoid FreeMon Step: the free category on the graph with one object
+-- and one edge for each step. The category laws are the path constructors of FreeMon,
+-- so they hold at open traces. fmSquash makes Trace a set (the trunc of PLAN 4.1).
+def Trace : Type 0 := FreeMon Step
+def tId : Trace := fmUnit Step
+def tStep : Step -> Trace := fun (s : Step) => fmEta Step s
+def tSeq : Trace -> Trace -> Trace := fun (f g : Trace) => fmMul Step f g
+def tIdl : (t : Trace) -> Path Trace (tSeq tId t) t := fun (t : Trace) => fun (i : I) => fmUnitL Step t i
+def tIdr : (t : Trace) -> Path Trace (tSeq t tId) t := fun (t : Trace) => fun (i : I) => fmUnitR Step t i
+def tAssoc : (f g h : Trace) -> Path Trace (tSeq (tSeq f g) h) (tSeq f (tSeq g h)) :=
+  fun (f g h : Trace) => fun (i : I) => fmAssoc Step f g h i
+def tIsSet : isSet Trace := fmIsSet Step
+
+-- The target of the meaning functor: the endomaps of Trunc0 W. Trunc0 W is a set by squash0,
+-- so Run is a set by squash0 at each point. This avoids isSet U256 (O29).
+def Run : Type 0 := Trunc0 W -> Trunc0 W
+def runId : Run := fun (t : Trunc0 W) => t
+def runSeq : Run -> Run -> Run := fun (f g : Run) (t : Trunc0 W) => g (f t)
+def runIsSet : isSet Run := fun (f g : Run) (p q : Path Run f g) => fun (i : I) => fun (j : I) => fun (t : Trunc0 W) =>
+  squash0 W (f t) (g t) (fun (k : I) => (p @ k) t) (fun (k : I) => (q @ k) t) i j
+def runAssoc : (f g h : Run) -> Path Run (runSeq (runSeq f g) h) (runSeq f (runSeq g h)) := fun (f g h : Run) => refl
+def runUnitL : (f : Run) -> Path Run (runSeq runId f) f := fun (f : Run) => refl
+def runUnitR : (f : Run) -> Path Run (runSeq f runId) f := fun (f : Run) => refl
+def stepRun : Step -> Run := fun (s : Step) (t : Trunc0 W) =>
+  fold (fun (r : W) => trunc0 W (stepW s r))
+    (fun (x : Trunc0 W) (y : Trunc0 W) (p : Path (Trunc0 W) x y) (q : Path (Trunc0 W) x y) => fun (i : I) => fun (j : I) => squash0 W x y p q i j) t
+
+-- The meaning functor (PLAN section 5): mu is the fold of FreeMon into Run.
+-- mu (id) = id and mu (g o f) = mu (g) o mu (f) hold by computation at open traces.
+def mu : Trace -> Run := fmFold Step Run runIsSet runId runSeq runAssoc runUnitL runUnitR stepRun
+def muId : Path Run (mu tId) runId := refl
+def muSeq : (f g : Trace) -> Path Run (mu (tSeq f g)) (runSeq (mu f) (mu g)) := fun (f g : Trace) => refl
+def muStep : (s : Step) -> Path Run (mu (tStep s)) (stepRun s) := fun (s : Step) => refl
+
+-- The slice over W * W: a trace from p to q is a trace and a path from its run at p to q.
+def TraceAt : W -> W -> Type 0 := fun (p q : W) => (t : Trace) * Path (Trunc0 W) (mu t (trunc0 W p)) (trunc0 W q)
+def idAt : (p : W) -> TraceAt p p := fun (p : W) => pack tId refl
+def seqAt : (p q r : W) -> TraceAt p q -> TraceAt q r -> TraceAt p r := fun (p q r : W) (a : TraceAt p q) (b : TraceAt q r) =>
+  pack (tSeq (witness a) (witness b))
+    (trans (Trunc0 W) (mu (witness b) (mu (witness a) (trunc0 W p))) (mu (witness b) (trunc0 W q)) (trunc0 W r)
+      (fun (i : I) => mu (witness b) (payload a @ i)) (payload b))
+
+-- Closed runs from w0 (the reserves of examples/pool.lang).
+def w0 : W := pair 1000u 1000u
+def runAt : Trace -> Trunc0 W := fun (t : Trace) => mu t (trunc0 W w0)
+def tIn : Trace := tStep (inl 100u)
+def tOut : Trace := tStep (inr (inl 90u))
+def tAdd : Trace := tStep (inr (inr (inl (pair 100u 100u))))
+def tClaim : Trace := tStep (inr (inr (inr 100u)))
+def runIn : Trunc0 W := runAt tIn
+def runInOut : Trunc0 W := runAt (tSeq tIn tOut)
+def runAdd : Trunc0 W := runAt tAdd
+def runClaim : Trunc0 W := runAt tClaim
+def runNone : Trunc0 W := runAt tId
+def runZeroIn : Nat -> Flag := fun (n : Nat) => u256Eq (first (stepW (inl (toU256 n)) w0)) 1000u
+def runLiquidity : (x y dx dy : U256) -> Trunc0 W := fun (x y dx dy : U256) =>
+  mu (tStep (inr (inr (inl (pair dx dy))))) (trunc0 W (pair x y))
+def liquidityX : (x y dx dy : U256) -> U256 := fun (x y dx dy : U256) =>
+  first (stepW (inr (inr (inl (pair dx dy)))) (pair x y))
+def liquidityY : (x y dx dy : U256) -> U256 := fun (x y dx dy : U256) =>
+  second (stepW (inr (inr (inl (pair dx dy)))) (pair x y))
+def runLiqUnder : Nat -> Flag := fun (n : Nat) => u256Eq (liquidityX 1000u 1000u 100u (toU256 n)) 1100u
+def runLiqOver : Nat -> Flag := fun (n : Nat) => u256Eq (liquidityY 1000u 1000u (toU256 n) 100u) 1100u
+def runLiqZeroX : Nat -> Flag := fun (n : Nat) => u256Eq (liquidityY 1000u 1000u (toU256 n) 1u) 1001u
+def runLiqZeroY : Nat -> Flag := fun (n : Nat) => u256Eq (liquidityX 1000u 1000u 1u (toU256 n)) 1001u
+def runLiqZeroBoth : Nat -> Flag := fun (n : Nat) => u256Eq (liquidityY 1000u 1000u (toU256 n) (toU256 n)) 1000u
+def runLiqRounded : Trunc0 W := runLiquidity 1100u 910u 100u 83u
+def runLiqRoundUnder : Nat -> Flag := fun (n : Nat) => u256Eq (liquidityX 1100u 910u 100u (toU256 n)) 1200u
+def runLiqRoundOver : Nat -> Flag := fun (n : Nat) => u256Eq (liquidityY 1100u 910u 100u (toU256 n)) 994u
+def inOutAt : TraceAt w0 (pair 1221u 820u) := seqAt w0 (pair 1100u 910u) (pair 1221u 820u) (pack tIn refl) (pack tOut refl)
+
+-- Stream of batches (PLAN 4.4, O16): batch n adds liquidity (n, n). The seed is the batch index.
+def Batch : Type 0 := Trace
+def batchAt : U256 -> Batch := fun (n : U256) => tStep (inr (inr (inl (pair n n))))
+def batches : Stream Batch := sCorec Batch U256 batchAt (fun (n : U256) => u256Add n 1u) 1u
+-- settle2 s is the run from w0 of the first two batches of s. sExtend gives it at each position.
+def settle2 : Stream Batch -> Trunc0 W := fun (s : Stream Batch) => runAt (tSeq (sHead Batch s) (sHead Batch (sTail Batch s)))
+def settled : Stream (Trunc0 W) := sExtend Batch (Trunc0 W) settle2 batches
+def settledHead : Trunc0 W := sHead (Trunc0 W) settled
+def settledNext : Trunc0 W := sHead (Trunc0 W) (sTail (Trunc0 W) settled)
+def dupNext : Trunc0 W := settle2 (sHead (Stream Batch) (sTail (Stream Batch) (sDuplicate Batch batches)))
+-- The state stream: the seed is the index and the state; the observation is the state.
+def states : Stream (Trunc0 W) := sCorec (Trunc0 W) (Prod U256 (Trunc0 W)) (fun (st : Prod U256 (Trunc0 W)) => second st)
+  (fun (st : Prod U256 (Trunc0 W)) => pair (u256Add (first st) 1u) (mu (batchAt (first st)) (second st))) (pair 1u (trunc0 W w0))
+def stateTwo : Trunc0 W := sHead (Trunc0 W) (sTail (Trunc0 W) (sTail (Trunc0 W) states))
+-- The state after two batches is the head of settled.
+def lawSettle : Path (Trunc0 W) stateTwo settledHead := refl

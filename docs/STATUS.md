@@ -456,3 +456,54 @@ Traps found in S4 s1:
 The other counts do not change: parse refusals 19, pool refusals 4,
 bridge refusals 6, kit-only refusals 22, proves 2, contracts 2 written
 5 refused, rings 6 built 2 refused, differential 28 guest evals, runs 5.
+
+## S4 s2
+
+Slice S4 s2 (Part 2: `Trace`, its category laws, the meaning functor
+and `Stream` of batches, Q-S4-1 (a), Q-S4-3 (a) and Q-S4-4 (a)) is
+complete, so S4 is complete. The change is not committed; its base is
+the USER commit 2f78a8e on 617d39b (the S4 s1 tree). The gate `make
+clean` then `make check` is GREEN, exit 0.
+
+Changes (O48):
+
+- `examples/trace.lang` (new, kit): the reserve words `W`, the steps
+  `Step` (swapIn, swapOut, addLiq and claim) and `stepW` over the
+  copied word functions of `examples/pool.lang` and
+  `examples/bridge.lang` (Q-S6-1 (a)); `Trace := FreeMon Step` with
+  `tIdl`, `tIdr` and `tAssoc` at open traces and `tIsSet`; the target
+  `Run := Trunc0 W -> Trunc0 W` with `runIsSet` and refl monoid laws;
+  the meaning functor `mu` (`fmFold`) with `muId`, `muSeq` and `muStep`
+  by refl; the slice `TraceAt` with `idAt`, `seqAt` and `inOutAt`; the
+  batch stream `batches`, `settle2`, `settled` (`sExtend`), `dupNext`
+  (`sDuplicate`), `states` and `lawSettle`; the original 9 eval entries.
+  The review adds positive-input and rounded-price guards to the trace
+  steps, plus 9 regression evals (O52).
+- `examples/kit.txt`: `trace.lang`.
+- `test/eval/expect.txt`: 18 `trace` rows, after the `cocell` rows.
+- No src change and no domain change.
+
+Traps found in S4 s2:
+
+- Calling the raw reserve functions bypassed `Positive` and `PriceEq`:
+  a zero input swap and a price-changing liquidity addition were
+  accepted. `swapInStepW` and `addLiqStepW` now check those conditions
+  before either reserve can be projected (O52).
+- A target of `W -> W` needs `isSet U256`, which has no guest proof
+  (O29). The target `Trunc0 W -> Trunc0 W` is a set by `squash0` at
+  each point, so `fmFold` needs no `U256` rule (O48, Q-S4-4 (a)).
+- A path in `TraceAt p q` needs a PathP of the endpoint paths. The laws
+  are on the trace component only (Q-S4-3 (a)).
+- The wf-builder and its opus fallback stopped on the
+  `reasoning_extraction` classifier before they made an edit. S4 s2 is
+  a build by hand (O50).
+
+| Count | S4 s1 | S4 s2 | Reason |
+|---|---|---|---|
+| examples | 48 | 49 | `trace.lang` |
+| evals | 242 | 260 | 9 original `trace` rows and 9 review regressions |
+
+The other counts do not change: parse refusals 19, check refusals 177,
+pool refusals 4, bridge refusals 6, kit-only refusals 22, proves 2,
+contracts 2 written 5 refused, rings 6 built 2 refused, differential 28
+guest evals, runs 5.

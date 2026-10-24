@@ -366,7 +366,7 @@ The ring size bounds the gas of `claim` (O17).
 | S1 | USER rulings on the questions of section 11; record them in this plan | DONE |
 | S2 | Kernel port from orbit-lang 2162fb2 (section 6); the gate counts of orbit-lang | DONE (2026-10-22): examples 41, parse refusals 19, check refusals 171, kit-only refusals 22, evals 159, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S3 | R1 narrowing: `REFUSE_CELL`, the free monoid, the former matrix as CM and CC rows (port of intent-lang 32c1d13) | DONE (2026-10-23): examples 44, parse refusals 19, check refusals 172, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 199, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
-| S4 | `Trace` as the free category CM in a slice; the category laws; the meaning functor; `Stream` of batches (CC) | s1 DONE (2026-10-23), Part 1, the port of intent-lang 4b36026 (the cocell comonads and `cofamily Stream`): examples 48, parse refusals 19, check refusals 177, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 242, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures (O44 to O47); Part 2 (`Trace`, the category laws, the meaning functor, `Stream` of batches) is s2 (Q-S4-1 (a)) |
+| S4 | `Trace` as the free category CM in a slice; the category laws; the meaning functor; `Stream` of batches (CC) | DONE (2026-10-23), s1 the port of intent-lang 4b36026 (O44 to O47), s2 Part 2 in the kit example `examples/trace.lang` (Q-S4-1 (a), Q-S4-3 (a), Q-S4-4 (a)): examples 49, parse refusals 19, check refusals 177, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 260, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s2 has no src change and no domain change (O48 to O52) |
 | S5 | Part P: `Pos`, `Pool k`, `swapIn`, `swapOut`, the least-solution law, `addLiq`, `removeLiq`, the overflow bound | DONE (2026-10-22): examples 42, parse refusals 19, check refusals 171, pool refusals 4, kit-only refusals 22, evals 180, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S6 | Part B: credit, `InFlight`, `deposit`, `seal`, `accept`, `claim` on the guest side; conservation; `ua e` transport | DONE (2026-10-22): examples 43, parse refusals 19, check refusals 171, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 199, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures |
 | S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | s1 DONE (2026-10-23), the guest side (Q-S7-1 (a)): examples 46, parse refusals 19, check refusals 174, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 217, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the host and precompile rows wait for intent-lang S5 and S6 (O33) |
@@ -550,7 +550,7 @@ The ring size bounds the gas of `claim` (O17).
   `lawPublic` is refl at closed values (PLAN 5). A refl in the place of
   `cylPush` is `PATH_END` (`test/check/zk-cyl-refl.lang`). No src
   change and no domain change. Builder call.
-- O39: Q-S8-2 (a) is taken: the tag stays "orbit" (Q-S2-1 stays OPEN).
+- O39: Q-S8-2 (a) is taken: the tag stays "orbit" (Q-S2-1 stayed OPEN until O51).
   The poll word of a claim is the hash of the domain word "claim"
   (0x636c61696d) and the batch number, so a claim signature is not a
   ballot signature. The tag is the global constant `BLSAG_TAG`
@@ -627,6 +627,81 @@ The ring size bounds the gas of `claim` (O17).
   req_011CgKeADaGfqrXNeZLD3grW). Part 1 is a build by hand (USER
   ruling 10-05, as in O42). The session context limit came before Part
   2, so Part 2 is S4 s2 (Q-S4-1 (a)).
+- O48: the S4 s2 design (Part 2; PLAN 4.1, 4.4 and section 5). It is
+  the kit example `examples/trace.lang`, with no src change and no
+  domain change. `W := Prod U256 U256` is the reserve words. `Step :=
+  Sum U256 (Sum U256 (Sum W U256))` has four kinds of step: `swapIn dx`,
+  `swapOut c`, `addLiq (dx, dy)` and `claim c`. `stepW` uses `elim` on
+  `Sum` to select the copied word functions `swapInW`, `swapOutW` and
+  `addLiqW` (from `examples/pool.lang`) and `claimW` (from
+  `examples/bridge.lang`), in the Q-S6-1 (a) pattern. `Trace := FreeMon
+  Step` is the free category on the graph with one object and one edge
+  for each step. The laws `tIdl`, `tIdr` and `tAssoc` are the path
+  constructors `fmUnitL`, `fmUnitR` and `fmAssoc`, so they hold at open
+  traces. `tIsSet := fmIsSet Step` is the trunc. The target is `Run :=
+  Trunc0 W -> Trunc0 W`. `runIsSet` is `squash0` at each point, and the
+  monoid laws of `Run` are refl. Thus `fmFold` does not need `isSet
+  U256` (the O29 gap). `stepRun s` is the `fold` of `Trunc0`: `trunc0 W
+  (stepW s r)` at a point and `squash0` at the squash case. The meaning
+  functor is `mu := fmFold Step Run runIsSet runId runSeq runAssoc
+  runUnitL runUnitR stepRun`. `muId`, `muSeq` (at open f and g) and
+  `muStep` (at an open s) are refl by computation. The slice is
+  `TraceAt p q := (t : Trace) * Path (Trunc0 W) (mu t (trunc0 W p))
+  (trunc0 W q)`, on `FreeMon`, not on `List`. `idAt` and `seqAt` are
+  open (`seqAt` uses `trans` and `ap` of `mu`), and `inOutAt` is
+  closed. The batch stream is `batches := sCorec Batch U256 batchAt (n +
+  1) 1u`, where batch n is `addLiq (n, n)`. `settle2` is the run from
+  `w0` of the first two batches. `settled := sExtend Batch (Trunc0 W)
+  settle2 batches`, and `dupNext` uses `sDuplicate`. The seed of
+  `states` is the index and the state. `lawSettle : Path (Trunc0 W)
+  stateTwo settledHead` is refl (closed). 9 eval rows (Q-S4-3 (a),
+  Q-S4-4 (a)).
+- O49: the S4 s2 probes. The first check of the full candidate stopped
+  with `PARSE_EXPECT` at `examples/trace.lang:56:3` ("expected 'def',
+  'axiom', 'family', 'cofamily', 'state' or 'event', found 'fun'"). It
+  was a copy error (a body line of `swapOut` without its head), not a
+  checker limit. The second check was `ok`. Candidate (i) as written
+  (the target is the endomaps `W -> W` of the words) was not probed:
+  `isSet (W -> W)` needs `isSet U256`, which has no guest proof (O29,
+  the PATH_UIP gap, Q-S3-1). Candidate (ii) with `List Step` was not
+  probed: its unit and assoc laws hold only at closed values, and
+  `FreeMon` gives them at open values. The 9 eval values were
+  calculated by hand before the run, and all 9 are equal to the eval
+  output. An example: `runInOut` is (1221, 820), because 100 goes in
+  and floor (1000 * 100 / 1100) = 90 goes out, then 90 goes out and
+  ceil (1100 * 90 / 820) = 121 goes in.
+- O50: the builder calls of S4 s2. The wf-builder (fable xhigh) stopped
+  on the `reasoning_extraction` classifier (request
+  req_011CgKoi6L8icQ15kfWgRji3) before it made an edit. The opus xhigh
+  fallback stopped on the same classifier (request
+  req_011CgKojhynFu57zzzyMSy8f). The main loop built S4 s2 by hand
+  (USER ruling 10-05, as in O42 and O47). The session context limit
+  came before the record, so a second session did the record.
+- O51: the USER blanket ruling (2026-10-23, verbatim): "Rule all
+  defaults for Q-S*-*". Each question with no ruling takes (a): Q-S2-1,
+  Q-S3-1, Q-S3-2, Q-S4-1, Q-S4-2, Q-S5-1, Q-S5-2, Q-S6-1, Q-S6-2,
+  Q-S6-3, Q-S7-1, Q-S7-2 and the new Q-S4-3 and Q-S4-4. The effects:
+  Q-S2-1 (a) keeps the tag "orbit". Its second half (a tag for each
+  use) is overtaken by Q-S8-2 (a) (O39), because no tag can separate
+  key images. Q-S3-2 (a): the 7 intent-lang aacc8ad fronttool cases
+  and the constant-line `transp` rule at `ZkBallot` (intent-lang
+  32c1d13) go with the S7 port. Q-S4-2 (a): S7 s2, the port of
+  intent-lang 1b65dec, is the next slice, before S9. The other (a)
+  options are the forms that are already in the tree.
+
+- O52: staged S4 s2 review: `stepW` called the raw reserve functions
+  without the preconditions carried by the public pool operations.
+  From (1000, 1000), adding (100, 1) produced (1100, 1001), and
+  `TraceAt` accepted that endpoint with `refl`, although `PriceEq`
+  fails. A zero input swap was also accepted despite `Positive`.
+  `swapInStepW` now checks a positive input. `addLiqStepW` checks
+  positive amounts and the same rounded price condition as `PriceEq`:
+  `dx * y <= dy * x < dx * y + x`. The guards wrap the whole result,
+  so either reserve projection rejects an invalid step. The invalid
+  endpoint proof is refused after the fix. Nine regression evals cover
+  zero inputs, both price inequalities and a valid rounded addition
+  (100, 83) at (1100, 910), producing (1200, 993). There are now 18
+  trace evals and 260 evals overall.
 
 ## 11. Questions for the USER (S1)
 
@@ -665,7 +740,7 @@ All ten are RULED (S1, 2026-10-22; the quote is in section 1).
   RECOMMENDED. (b) a minimum output on `claim`; it needs a refund path.
   RULED: (a).
 
-### S2 questions (OPEN)
+### S2 questions (RULED)
 
 - Q-S2-1. The bLSAG domain tag of the ported code is the ASCII word
   "orbit" (`src/front/blsag.c` line 12). (a) keep it until S8, where the
@@ -674,6 +749,9 @@ All ten are RULED (S1, 2026-10-22; the quote is in section 1).
   link to the other. Choose the words in the tag format of
   `src/front/blsag.c` line 12. RECOMMENDED. (b) change it to "bridge" in
   S3 and make the 14 precompile rows again. (c) keep "orbit" for good.
+  RULED: (a) (USER, 2026-10-23). Q-S8-2 (a) overtakes its second half
+  (a tag for each use), because no tag can separate key images (O39,
+  O51).
 - Q-S2-2. The order after S2, if intent-lang S3 (REFUSE_CELL) has no USER
   commit yet. bridge-lang S3 ports it (Q9 (a)). (a) do S5 (Part P) next:
   `Pool k` is indexed by a `U256` value, not by a type, so R1 does not
@@ -681,7 +759,7 @@ All ten are RULED (S1, 2026-10-22; the quote is in section 1).
   (b) wait for intent-lang S3. (c) build S3 here (this goes against Q9
   (a)). RULED: (a) (the USER ran the S5 prompt, 2026-10-22).
 
-### S5 questions (OPEN)
+### S5 questions (RULED)
 
 - Q-S5-1 (kit multiply and divide). (a) keep the guest folds of
   `examples/pool.lang`; S10 measures their gas, then decides. RECOMMENDED.
@@ -690,7 +768,7 @@ All ten are RULED (S1, 2026-10-22; the quote is in section 1).
   `u256_arith` (line 1333), `src/front/u256.c` (`u256_mul` is still in
   `src/front/u256.h` line 22), the EVM lowering in `src/lower.c`. This
   undoes sealed-lang R19 here. (c) (b) only for the EVM form, guest folds
-  for the laws.
+  for the laws. RULED: (a) (USER, 2026-10-23).
 - Q-S5-2 (the laws). The checker has no rule that makes a `Path Flag _
   flagYes` proof from a Flag test (`rule_flag_if`, `src/front/check.c`
   line 2286), so `swapIn : Pool k -> Pos -> Pool k` (4.2) cannot check
@@ -702,15 +780,15 @@ All ten are RULED (S1, 2026-10-22; the quote is in section 1).
   form. RECOMMENDED. (b) a dependent Flag eliminator (a `decide` rule at
   `rule_flag_if`), so that `swapIn : Pool k -> Positive -> Option (Pool
   k)` checks the invariant at run time. This is a src change (the Q-S5-1
-  rulings apply).
+  rulings apply). RULED: (a) (USER, 2026-10-23).
 
-### S6 questions (OPEN)
+### S6 questions (RULED)
 
 - Q-S6-1 (the pool defs in a second example). (a) copy them in
   `examples/bridge.lang`; the gate checks each guest file alone.
   RECOMMENDED, taken (O21). (b) a prelude form for examples and evals in
   `test/gate.sh`, so that `examples/bridge.lang` reads
-  `examples/pool.lang` and holds no copy.
+  `examples/pool.lang` and holds no copy. RULED: (a) (USER, 2026-10-23).
 - Q-S6-2 (the `InFlight` carrier). (a) `List Msg` in batch order until
   bridge-lang S3 ports the intent-lang free commutative monoid; then
   `InFlight` becomes that bag. RECOMMENDED. (b) a kit path rule for the
@@ -718,13 +796,15 @@ All ten are RULED (S1, 2026-10-22; the quote is in section 1).
   `src/front/check.c` line 129; `u256Add` is at line 184), so that a sum
   over the current `Bag` checks now. (c) a count for each denomination in
   a pair of Nat; it needs a dependent eliminator on `Fin 2` (there is
-  none; the Q-S5-2 site, `src/front/check.c` line 2286).
+  none; the Q-S5-2 site, `src/front/check.c` line 2286). RULED: (a)
+  (USER, 2026-10-23).
 - Q-S6-3 (`ua e` on a whole pool value). (a) the law on the reserve word;
   the S10 two-deployment differential checks the same bytecode on the
   two sides. RECOMMENDED. (b) a larger arena, or a lazy Glue transport at
   a Sigma (a src change; the limit is at `src/front/eval.c` line 90).
+  RULED: (a) (USER, 2026-10-23).
 
-### S3 questions (OPEN)
+### S3 questions (RULED)
 
 - Q-S3-1 (the `InFlight` carrier after the S3 port; from Q-S6-2 (a)).
   The probe (O29) shows that a fold out of `Bag Msg` into `U256` needs
@@ -738,7 +818,7 @@ All ten are RULED (S1, 2026-10-22; the quote is in section 1).
   and `isSet Flag`, and `removeMsg` the same at `Prod Flag (Prod InFlight
   InFlight)`. (c) `InFlight := FreeMon Msg` with `fmFold`: it takes
   `isSet U256` and the `u256Add` laws as arguments, so it needs the (b)
-  rules too.
+  rules too. RULED: (a) (USER, 2026-10-23).
 - Q-S3-2 (the 7 intent-lang aacc8ad fronttool cases, O27 and O31). (a)
   add the 6 cases that pass as regression cases in a later slice (no src
   change), and port the constant-line `transp` rule at `ZkBallot` from
@@ -746,19 +826,23 @@ All ten are RULED (S1, 2026-10-22; the quote is in section 1).
   `src/front/eval.c` line 2525) with the seventh case in the S7 port.
   RECOMMENDED. (b) add the 6 cases now and leave the seventh out. (c)
   leave all 7 out; the intent-lang review cases are not bridge-lang work.
+  RULED: (a) (USER, 2026-10-23). The 7 cases and the `transp` rule go
+  with the S7 port (S7 s2, O51).
 
-Q-S2-1, Q-S5-1, Q-S5-2, Q-S6-1, Q-S6-2 and Q-S6-3 stay OPEN. Q-S6-2 (a)
-is the S6 form; the S3 probe (O29) did not make the change, so Q-S3-1
-carries the carrier question.
+The USER RULED Q-S2-1, Q-S3-1, Q-S3-2, Q-S5-1, Q-S5-2, Q-S6-1, Q-S6-2
+and Q-S6-3 (a) (2026-10-23, O51). Q-S6-2 (a) is the S6 form; the S3
+probe (O29) did not make the change, so Q-S3-1 carries the carrier
+question.
 
-### S7 questions (OPEN)
+### S7 questions (RULED)
 
 - Q-S7-1 (the order of the host and precompile rows). intent-lang has no
   S5 and no S6 commit. (a) the guest side first: `Enc`, `decrypt`,
   `open`, `observe` and the Schnorr attestation verify as guest code and
   laws over the kit BN254 operations, with eval rows; the host and
   precompile rows after the intent-lang S5 and S6 commits (a port, Q9
-  (a)). RECOMMENDED, taken (O33). (b) wait for them.
+  (a)). RECOMMENDED, taken (O33). (b) wait for them. RULED: (a) (USER,
+  2026-10-23).
 - Q-S7-2 (the seal of `Enc`). A program cannot declare a family
   (`REFUSE_DATA`), and the checker has no seal rule and no law-only
   rule: `fold`, `elim` and the projections are guest operations, and
@@ -777,10 +861,12 @@ carries the carrier question.
   `src/front/eval.c` line 1871, a `transp` case at `src/front/eval.c`
   line 2525) and an `Enc` splice in `src/front/front.c` (the `zk_source`
   form). A reuse of `ZkBallot` is not an option: `Enc Choice` would be
-  the private ballot type of the ZK splice.
+  the private ballot type of the ZK splice. RULED: (a) (USER,
+  2026-10-23). The port of intent-lang 1b65dec (S7 s2, Q-S4-2 (a))
+  replaces the alias with the sealed `Enc`.
 
-Q-S7-1 (a) and Q-S7-2 (a) are taken. Q-S2-1, Q-S3-1, Q-S3-2, Q-S5-1,
-Q-S5-2, Q-S6-1, Q-S6-2 and Q-S6-3 stay OPEN.
+Q-S7-1 (a) and Q-S7-2 (a) are taken. The USER RULED both (a)
+(2026-10-23, O51).
 
 ### S8 questions (RULED)
 
@@ -788,7 +874,7 @@ Q-S5-2, Q-S6-1, Q-S6-2 and Q-S6-3 stay OPEN.
   src change and no domain change. RECOMMENDED, taken (O38). (b)
   `family Cyl` in `domain/domain.lang`. (c) a kernel splice
   `kernel/zkbridge.lang`. RULED: (a) (USER, 2026-10-23).
-- Q-S8-2 (the claim domain; Q-S2-1 stays OPEN). (a) keep the tag
+- Q-S8-2 (the claim domain; Q-S2-1 was OPEN then). (a) keep the tag
   "orbit", put the word "claim" in the poll slot, and record key-image
   unlinkability as a VALIDATION assumption (one-time keys, O13), with
   the fact that a tag cannot separate key images. RECOMMENDED, taken
@@ -809,22 +895,36 @@ Q-S5-2, Q-S6-1, Q-S6-2 and Q-S6-3 stay OPEN.
   (USER, 2026-10-23).
 
 The USER RULED Q-S8-1 (a), Q-S8-2 (a), Q-S8-3 (a) and Q-S8-4 (a)
-(2026-10-23). Q-S2-1, Q-S3-1, Q-S3-2, Q-S5-1, Q-S5-2, Q-S6-1, Q-S6-2,
-Q-S6-3 and Q-S7-2 stay OPEN.
+(2026-10-23). The blanket ruling of O51 then RULED Q-S2-1, Q-S3-1,
+Q-S3-2, Q-S5-1, Q-S5-2, Q-S6-1, Q-S6-2, Q-S6-3 and Q-S7-2 (a).
 
-### S4 questions (OPEN)
+### S4 questions (RULED)
 
 - Q-S4-1 (the order of Part 2). (a) S4 s2 next: `Trace`, its category
   laws, the meaning functor and `Stream` of batches on the ported
   `cofamily Stream`, before S9. RECOMMENDED, taken (O47). (b) S9 first,
-  then S4 s2.
+  then S4 s2. RULED: (a) (USER, 2026-10-23).
 - Q-S4-2 (the port of intent-lang 1b65dec, its S5, O44). S9 uses `Enc`
   for the encrypted ballots. (a) port 1b65dec after S4 s2 and before
   S9, so that S9 uses the sealed `Enc` and does not migrate later; the
   port is a src change and answers Q-S7-2 in the intent-lang form.
   RECOMMENDED. (b) S9 first on the S7 alias `Enc A := Prod Unit A`
   (Q-S7-2 (a)), then the port and a migration of S9. No step of S4 s1
-  takes an option.
+  takes an option. RULED: (a) (USER, 2026-10-23).
+- Q-S4-3 (the slice laws). A path in `TraceAt p q` needs a PathP of the
+  endpoint paths over `tIdl` (and the other laws). (a) the laws on the
+  trace component (open, the `FreeMon` constructors); the endpoint
+  component is a proposition because `Trunc0 W` is a set; the Sigma
+  form of the laws is a recorded gap. RECOMMENDED, taken (O48). (b) a
+  guest `isProp` lemma for a PathP into a set (a toPathP form) in a
+  later slice, then the full Sigma laws. (c) the lemma in
+  `domain/domain.lang`. RULED: (a) (USER, 2026-10-23).
+- Q-S4-4 (the target of `mu`). The run is in `Trunc0 W`, so a guest map
+  can read the words back only into a set. (a) keep `Trunc0 W`; the S10
+  contract uses the word functions, not `mu`. RECOMMENDED, taken (O48).
+  (b) a set rule for `U256` (src, the Q-S3-1 (b) rule), then `Run := W
+  -> W`. RULED: (a) (USER, 2026-10-23).
 
-Q-S4-1 (a) is taken. Q-S4-2 is OPEN for the USER. Q-S2-1, Q-S3-1,
-Q-S3-2, Q-S5-1, Q-S5-2, Q-S6-1, Q-S6-2, Q-S6-3 and Q-S7-2 stay OPEN.
+Q-S4-1 (a), Q-S4-3 (a) and Q-S4-4 (a) are taken. The USER RULED all
+four S4 questions (a) (2026-10-23, O51). Q-S4-2 (a) makes S7 s2 (the
+port of intent-lang 1b65dec) the next slice. No question is OPEN.
