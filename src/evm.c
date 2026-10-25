@@ -484,8 +484,8 @@ static int is_zero(const unsigned char *w) {
 
 /* Slice K4a. The asm messages go to a null sink: the caller writes the
    diagnostic from the return code. */
-EvmBuild evm_build(const IrProgram *prog, const unsigned char (*pairs)[64], size_t count, TargetPart part,
-                   FILE *out) {
+EvmBuild evm_build(const IrProgram *prog, const unsigned char (*pairs)[64], size_t count,
+                   const unsigned char *arg, TargetPart part, FILE *out) {
   Asm *a = calloc(3, sizeof(Asm));
   FILE *sink = fopen("/dev/null", "w");
   if (a == NULL || sink == NULL) {
@@ -508,8 +508,23 @@ EvmBuild evm_build(const IrProgram *prog, const unsigned char (*pairs)[64], size
     asm_push_word(stores, pairs[i]);
     asm_op(stores, EVM_OP_SSTORE);
   }
+  if (part != TARGET_PART_RUNTIME && arg != NULL) {
+    /* The side value (Q-S10-5): CODECOPY the last 32 bytes of the creation
+       code to memory 0 (destOffset 0, offset CODESIZE - 32, size 32), MLOAD,
+       SSTORE at the slot ARG. */
+    asm_push(stores, 32);
+    asm_push(stores, 32);
+    asm_op(stores, EVM_OP_CODESIZE);
+    asm_op(stores, EVM_OP_SUB);
+    asm_op(stores, EVM_OP_PUSH0);
+    asm_op(stores, EVM_OP_CODECOPY);
+    asm_op(stores, EVM_OP_PUSH0);
+    asm_op(stores, EVM_OP_MLOAD);
+    asm_push_word(stores, arg);
+    asm_op(stores, EVM_OP_SSTORE);
+  }
   EvmBuild result = stores->full || !asm_finish(runtime, sink) || runtime->size > ASM_RUNTIME_MAX
-                        || (part != TARGET_PART_RUNTIME && !asm_creation_store(code, stores, runtime, sink))
+                        || (part != TARGET_PART_RUNTIME && !asm_creation_store(code, stores, runtime, arg != NULL ? 32u : 0u, sink))
                         ? EVM_BUILD_SIZE
                     : out == NULL || asm_write_hex(part == TARGET_PART_RUNTIME ? runtime : code, out, sink)
                         ? EVM_BUILD_OK : EVM_BUILD_WRITE;

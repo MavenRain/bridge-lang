@@ -1,3 +1,4 @@
--- REFUSE_LOWER (slice K4a): init with arguments needs the constructor data.
+-- REFUSE_LOWER (slice K4a, S10 s2): a Nat argument of init is refused; a build
+-- reads one U256 argument (the side value).
 state State := makeState (count : Nat)
 def init : Nat -> State := fun (n : Nat) => makeState n

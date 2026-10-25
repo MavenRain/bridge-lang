@@ -219,12 +219,17 @@ ring_built() {
   { build/langc contract "test/contract/ring$1.lang" >"$tmp/ring.lang" &&
     build/langc --kit build "$tmp/ring.lang" >"$tmp/init" &&
     build/langc --kit build "$tmp/ring.lang" --runtime >"$tmp/runtime"; } 2>"$tmp/err" || status=$?
+  sized "ring $1"
+}
+# sized NAME: the build of NAME (its exit status, $tmp/init, $tmp/runtime and
+# $tmp/err) must exit 0 within the limits.
+sized() {
   init=$(($(tr -d '\n' <"$tmp/init" | wc -c) / 2))
   runtime=$(($(tr -d '\n' <"$tmp/runtime" | wc -c) / 2))
   if [ "$status" -eq 0 ] && [ "$runtime" -gt 0 ] && [ "$init" -le 49152 ] && [ "$runtime" -le 24576 ]; then
     rbuilt=$((rbuilt + 1))
   else
-    echo "FAIL ring $1: want a build within 49152 and 24576 bytes, got exit $status, $init and $runtime bytes: $(head -n 1 "$tmp/err")"
+    echo "FAIL $1: want a build within 49152 and 24576 bytes, got exit $status, $init and $runtime bytes: $(head -n 1 "$tmp/err")"
     rfail=$((rfail + 1))
   fi
 }
@@ -250,6 +255,14 @@ ring_built 4
 ring_built 8
 ring_built 16
 ring_built 22
+# The twin contract (S10 s2, map D1) has a ring of 3. One bytecode is the two
+# sides (the side is the init argument), so one build is the size row of both.
+status=0
+: >"$tmp/init"
+: >"$tmp/runtime"
+{ build/langc --kit build examples/twin.lang >"$tmp/init" &&
+  build/langc --kit build examples/twin.lang --runtime >"$tmp/runtime"; } 2>"$tmp/err" || status=$?
+sized examples/twin.lang
 ring_refused 23 EVM_SIZE
 ring_refused 28 EVM_SIGNATURE
 echo "rings: $rbuilt built, $rrefused refused, $rfail failed"

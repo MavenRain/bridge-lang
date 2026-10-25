@@ -31,7 +31,7 @@ static int selector_collision(void) {
     const IrProgram program = {funcs, 2};
     const TargetPart parts[] = {TARGET_PART_MAIN, TARGET_PART_RUNTIME};
     for (size_t i = 0; i < sizeof parts / sizeof parts[0]; i++) {
-      EvmBuild result = evm_build(&program, NULL, 0, parts[i], out);
+      EvmBuild result = evm_build(&program, NULL, 0, NULL, parts[i], out);
       ok = result == EVM_BUILD_SELECTOR && ftell(out) == 0 && ok;
     }
     IrFunc swap = funcs[0]; funcs[0] = funcs[1]; funcs[1] = swap;
@@ -67,7 +67,7 @@ static int long_event(void) {
     char hex[4096] = {0};
     FILE *out = tmpfile();
     if (out == NULL) return 0;
-    EvmBuild result = evm_build(&program, NULL, 0, parts[i], out);
+    EvmBuild result = evm_build(&program, NULL, 0, NULL, parts[i], out);
     rewind(out);
     size_t len = fread(hex, 1, sizeof hex - 1u, out);
     ok = result == EVM_BUILD_OK && len > 0 && !ferror(out) && strstr(hex, topic) != NULL && ok;
@@ -89,9 +89,9 @@ static int runtime_size(void) {
     pairs[i][30] = (unsigned char)(i >> 8);
     pairs[i][31] = (unsigned char)i;
   }
-  int ok = evm_build(&(IrProgram){NULL, 0}, (const unsigned char (*)[64])pairs, 1000, TARGET_PART_MAIN, out) == EVM_BUILD_SIZE
+  int ok = evm_build(&(IrProgram){NULL, 0}, (const unsigned char (*)[64])pairs, 1000, NULL, TARGET_PART_MAIN, out) == EVM_BUILD_SIZE
     && ftell(out) == 0;
-  ok = ok && evm_build(&(IrProgram){NULL, 0}, (const unsigned char (*)[64])pairs, 1000, TARGET_PART_RUNTIME, out) == EVM_BUILD_OK;
+  ok = ok && evm_build(&(IrProgram){NULL, 0}, (const unsigned char (*)[64])pairs, 1000, NULL, TARGET_PART_RUNTIME, out) == EVM_BUILD_OK;
   rewind(out);
   size_t len = fread(hex, 1, sizeof hex - 1u, out);
   ok = ok && !ferror(out) && len == sizeof want - 1u && strcmp(hex, want) == 0;
@@ -118,7 +118,7 @@ static int runtime_limit(void) {
     for (size_t i = 0; i < sizeof parts / sizeof parts[0]; i++) {
       FILE *out = tmpfile();
       if (out == NULL) { free(items); return 0; }
-      EvmBuild result = evm_build(&program, NULL, 0, parts[i], out);
+      EvmBuild result = evm_build(&program, NULL, 0, NULL, parts[i], out);
       ok = result == want && (want == EVM_BUILD_OK ? ftell(out) > 0 : ftell(out) == 0) && ok;
       fclose(out);
     }

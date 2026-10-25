@@ -1,0 +1,4 @@
+-- REFUSE_LOWER (S10 s2): init with two arguments is refused; a build reads one
+-- U256 argument (the side value).
+state State := makeState (side : U256) (held : U256)
+def init : U256 -> U256 -> State := fun (x : U256) (y : U256) => makeState x y

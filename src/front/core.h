@@ -107,7 +107,10 @@ typedef enum {
   OP_FIN_CASE, /* finAll case: k, body0, ..., body(n-1); body j at the literal j */
   OP_GLUE,     /* Glue A phi sys: a type; sys as in OP_HCOMP, each branch pack T e */
   OP_GLUE_ELEM, /* glue: phi, sys, a; sys as in OP_HCOMP, each branch t */
-  OP_UNGLUE    /* unglue: A, phi, sys, g; stuck when no rule applies */
+  OP_UNGLUE,   /* unglue: A, phi, sys, g; stuck when no rule applies */
+  /* bridge-lang S10 s2 (Q-S10-9 (a)): the U256 product and floor. */
+  OP_U256_MUL, /* u256Mul a b: a * b; traps on an overflow (EVM MUL) */
+  OP_U256_DIV  /* u256Div a b: the floor of a / b; traps when b is 0 (EVM DIV) */
 } Op;
 
 /* The instance of pure, map, bind and filter (formers F5 and F8). */

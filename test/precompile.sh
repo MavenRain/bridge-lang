@@ -20,8 +20,8 @@ prog=examples/precompile.lang
 caller=0x00000000000000000000000000000000000000aa
 
 # call WANT NAME ARGS...: one step of the view or entry NAME with ARGS at
-# TIMESTAMP 1. The result must equal WANT: `out HEX` (HEX as hexnorm), `ok` or
-# `revert`. An entry changes the storage of the next step.
+# TIMESTAMP 1. The result must equal WANT: `out HEX` (HEX as hexnorm), `ok`,
+# `revert` or `trap`. An entry changes the storage of the next step.
 call() {
   _want=$1 _name=$2
   shift 2
@@ -92,6 +92,13 @@ else
   call "out 4" leafStep 7
   call "out 3" leafStep 6
   call "out aa" addrWord 0x00000000000000000000000000000000000000aa
+  # u256Mul and u256Div (S10 s2, Q-S10-9 (a)): MUL with the overflow trap, DIV with the 0 trap.
+  call "out f" mulv 3u 5u
+  call "out fffffffffffffffffffffffffffffffe00000000000000000000000000000001" mulv 0xffffffffffffffffffffffffffffffffu 0xffffffffffffffffffffffffffffffffu
+  call trap mulv 0x8000000000000000000000000000000000000000000000000000000000000000u 2u
+  call "out 3" divv 7u 2u
+  call "out ffffffffffffffffffffffffffffffff" divv 0xfffffffffffffffffffffffffffffffe00000000000000000000000000000001u 0xffffffffffffffffffffffffffffffffu
+  call trap divv 7u 0u
 fi
 
 # The private cast of examples/zkcast.lang (S8 B3a): the ring (p0, p1) at poll 0.
@@ -275,6 +282,35 @@ while read -r line <&3; do
   [ "$fail" -eq "$before" ] || echo "FAIL differential row: $line"
 done 3<test/contract/diff.txt
 echo "differential: $diffs EVM rows checked"
+
+# The side value (S10 s2, Q-S10-5 (a)): deploy examples/side.lang with the
+# 32-byte word 7 after the creation code. init : U256 -> State writes the word
+# to field 0 (slot 0), and the view sideOf gives it. The guest evaluator does
+# not see the appended word, thus only this row tests it (test/run/side.script
+# gives the word on the init line).
+prog=examples/side.lang
+if ! deploy "$prog" 0000000000000000000000000000000000000000000000000000000000000007; then
+  echo "FAIL side deploy: $(head -n 1 "$tmp/dump")"
+  fail=$((fail + 1))
+else
+  steps=$((steps + 1))
+  side=$(hexnorm "$(awk '$1 ~ /^0+$/ { print $2 }' "$tmp/raw")")
+  [ "$side" = 7 ] || { echo "FAIL side slot 0: want 7, got $side"; fail=$((fail + 1)); }
+  call "out 7" sideOf
+fi
+
+# A constructor argument is one complete ABI word. Missing, partial and
+# extra words must revert instead of reading runtime bytes or the final word.
+for bad in '' 07 00000000000000000000000000000000000000000000000000000000000000070000000000000000000000000000000000000000000000000000000000000008; do
+  steps=$((steps + 1))
+  if deploy "$prog" "$bad" && [ -n "$(cat "$tmp/code")" ]; then
+    echo "FAIL side malformed constructor: deployed with $((${#bad} / 2)) argument bytes"
+    fail=$((fail + 1))
+  elif ! awk '/execution reverted/ { found = 1 } END { exit !found }' "$tmp/dump"; then
+    echo "FAIL side malformed constructor: expected a revert"
+    fail=$((fail + 1))
+  fi
+done
 
 rm -rf "$tmp"
 echo "precompile: $steps steps checked"

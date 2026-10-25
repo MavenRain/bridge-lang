@@ -359,3 +359,32 @@ p`, thus a ballot of another poll (`castOtherPoll`) or of another
 proposal (`castOtherProp`) gives 0. `ctWord` is the hash chain of the 8
 ciphertext coordinates, thus other ciphertexts with the same proofs
 (`castOtherCt`) give 0.
+
+## The size of the twin contract (S10 s2)
+
+`examples/twin.lang` is the contract of PLAN 7 at ring 3 (Q-S10-2 (a)).
+The size row of `test/gate.sh` builds it with `langc --kit build` and
+`langc --kit build --runtime`, after the ring rows, with the same
+limits. Measured on 2026-10-25 on 460fda6 with the S10 s2 review fixes:
+
+| Build | bytes | Limit | Free |
+|---|---|---|---|
+| init code | 23972 | 49152 (EIP-3860) | 25180 |
+| init code plus argument | 24004 | 49152 (EIP-3860) | 25148 |
+| runtime | 23879 | 24576 (EIP-170) | 697 |
+
+Constructor data must be exactly one 32-byte word. The assembler checks
+the creation code plus that word against EIP-3860. The three malformed
+constructor cases run on the EVM in `test/precompile.sh`.
+
+`test/twin.sh` checks 13 DSL regressions against the complete twin program:
+bounded vote counts, frozen polls after opening, full homogeneous batches,
+distinct roots for repeated deposits in different batches, and the batch
+number in claims. Valid casts, slot proofs, closes, seals and claims remain
+positive controls. Batches start at `hash 0x6261746368u n`, and `claim`
+takes the source batch number before the credit and keys.
+
+In S10 s2 the claim has no ring signature on the EVM (Q-S10-11 (c)).
+With the ring signature of `cast` on the claim (the mutant M-t1, the
+`voters` ring), the build gives EVM_SIZE. Thus a claim ring signature
+needs a shared bLSAG routine (a later slice, O75).

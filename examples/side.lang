@@ -1,0 +1,14 @@
+-- The side value (S10 s2, Q-S10-5 (a)): init has one U256 argument, the side of the deployment.
+-- `langc build` reads the argument from the 32-byte word after the creation code (test/precompile.sh).
+-- `langc run` reads it from the first script line, `init WORD` (test/run/side.script).
+state State := makeState (side : U256) (held : U256)
+
+-- The start state: the side from the argument and held 0.
+def init : U256 -> State := fun (x : U256) => makeState x 0u
+
+-- The entry bump adds 1 to held. It keeps the side.
+def bump : (env : Env) -> (s : State) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) => some (pair (makeState (side s) (u256Add (held s) 1u)) nil)
+
+-- The view sideOf gives the side.
+def sideOf : (env : Env) -> (s : State) -> U256 := fun (env : Env) (s : State) => side s

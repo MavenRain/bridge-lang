@@ -15,11 +15,13 @@ paths.lang
 precompile.lang
 quot.lang
 residuals.lang
+side.lang
 sigma.lang
 state-aliases.lang
 state-no-history.lang
 storage.lang
 trunc.lang
+twin.lang
 universes.lang
 words.lang
 equiv.lang

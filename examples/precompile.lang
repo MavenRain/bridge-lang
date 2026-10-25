@@ -75,6 +75,28 @@ def leafStep : (env : Env) -> (s : State) -> (i : Nat) -> Nat :=
 def addrWord : (env : Env) -> (s : State) -> (a : Addr) -> U256 :=
   fun (env : Env) (s : State) (a : Addr) => addrToU256 a
 
+-- u256Mul and u256Div (bridge-lang S10 s2, Q-S10-9 (a)): the product traps on an overflow, the floor traps on 0.
+def mulU : (a b : U256) -> U256 := fun (a b : U256) => u256Mul a b
+def divU : (a b : U256) -> U256 := fun (a b : U256) => u256Div a b
+-- Closed rows for `langc eval` (test/eval/expect.txt). The rows fMul0 to fDivTrap of examples/enact.lang (the fold
+-- defs mul and divFloor) give the same words.
+def uMul0 : U256 := mulU 0u 9u
+def uMul1 : U256 := mulU 1u 9u
+def uMul15 : U256 := mulU 3u 5u
+def uMulSq : U256 := mulU 0xffffffffffffffffffffffffffffffffu 0xffffffffffffffffffffffffffffffffu
+-- The trap rows are entries (a Nat in, a Nat out), so `langc eval` gives EVAL_OVERFLOW. flagIf forces the word.
+def uMulTrap : (k : Nat) -> Nat := fun (k : Nat) => flagIf (u256Eq (mulU 0x8000000000000000000000000000000000000000000000000000000000000000u (toU256 k)) 0u) 0 1
+def uDiv0 : U256 := divU 0u 5u
+def uDiv3 : U256 := divU 7u 2u
+def uDivSq : U256 := divU 0xfffffffffffffffffffffffffffffffe00000000000000000000000000000001u 0xffffffffffffffffffffffffffffffffu
+def uDivTrap : (k : Nat) -> Nat := fun (k : Nat) => flagIf (u256Eq (divU 7u (toU256 k)) 0u) 0 1
+
+def mulv : (env : Env) -> (s : State) -> (a b : U256) -> U256 :=
+  fun (env : Env) (s : State) (a b : U256) => mulU a b
+
+def divv : (env : Env) -> (s : State) -> (a b : U256) -> U256 :=
+  fun (env : Env) (s : State) (a b : U256) => divU a b
+
 -- Closed terms for `langc eval`: hash computes (keccak256 of 64 zero bytes), the closed ecAdd computes (S8 B1), addrToU256 computes.
 def hashZero : U256 := hash 0u 0u
 

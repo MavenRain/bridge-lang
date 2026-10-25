@@ -1,0 +1,13 @@
+closeZero 1
+closeAlias 0
+castBeforeOpen 1
+castAfterOpen 0
+partialSeal 0
+mixedDeposit 0
+fullSeal 1
+fourthDeposit 0
+repeatedRoot 0
+slotBeforeOpen 1
+slotAfterOpen 0
+claimBatchZero 1
+claimBatchOne 0

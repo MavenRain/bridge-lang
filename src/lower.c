@@ -94,10 +94,14 @@ static void word_add(Word out, const Word base, uint64_t n) {
 }
 
 /* The (slot, value) word pairs of the start state. AT is NULL in the first
-   walk, which only counts the pairs. */
+   walk, which only counts the pairs. When init reads one U256 argument (the
+   side value, Q-S10-5), HAS_ARG is 1 and ARG is the slot of the field that
+   gets it. */
 typedef struct {
   unsigned char (*at)[64];
   size_t count;
+  int has_arg;
+  Word arg;
 } Pairs;
 
 static void pair_add(Pairs *p, const Word slot, const Word value) {
@@ -114,6 +118,13 @@ static int lower_field(Pairs *p, uint64_t i, Form form, const Value *v) {
   Word slot, value, at, key;
   word_u64(slot, i);
   if (form == FORM_WORD) {
+    /* The init argument (Q-S10-5) goes to one field only. */
+    if (v != NULL && v->kind == VAL_VAR && v->nat == 0u) {
+      if (p->has_arg && memcmp(p->arg, slot, 32) != 0) return 0;
+      p->has_arg = 1;
+      memcpy(p->arg, slot, 32);
+      return 1;
+    }
     if (!word_of(v, value)) return 0;
     pair_add(p, slot, value);
     return 1;
@@ -400,6 +411,7 @@ static const struct {
     {OP_NAT_LE, IR_OP_LE},     {OP_U256_ADD, IR_OP_ADD_TRAP}, {OP_U256_SUB, IR_OP_SUB},
     {OP_U256_LE, IR_OP_LE},    {OP_U256_EQ, IR_OP_EQ},        {OP_ADDR_EQ, IR_OP_EQ},
     {OP_HASH, IR_OP_KECCAK},   {OP_NAT_DIV, IR_OP_DIV},       {OP_NAT_MOD, IR_OP_MOD},
+    {OP_U256_MUL, IR_OP_MUL_TRAP}, {OP_U256_DIV, IR_OP_DIV},
 };
 
 static int form_at(Low *l, uint32_t field) {
@@ -915,8 +927,8 @@ static int lower_entries(Machine *m, const CtorInfo *ci, IrProgram *program, con
   return 1;
 }
 
-/* Checks that M has a state and def init : State, with word, List and Map
-   fields only. CI_OUT gets the state constructor and INIT_OUT the index of
+/* Checks that M has a state and def init : State (or init : U256 -> State,
+   Q-S10-5), with word, List and Map fields only. CI_OUT gets the state constructor and INIT_OUT the index of
    init. Returns 0, or 1 after a diagnostic. */
 static int lower_state_ctor(Machine *m, const CtorInfo **ci_out, uint32_t *init_out) {
   uint32_t init = m->def_count;
@@ -927,8 +939,14 @@ static int lower_state_ctor(Machine *m, const CtorInfo **ci_out, uint32_t *init_
   if (!m->has_state || init == m->def_count)
     return diag_fail(m->diag, "REFUSE_LOWER", NULL, "a build needs a state and def init : State") + 1;
   const Value *type = m->defs[init].type;
-  if (type != NULL && type->kind == VAL_PI)
-    return diag_fail(m->diag, "REFUSE_LOWER", "init", "init has arguments; K4a does not read constructor arguments") + 1;
+  if (type != NULL && type->kind == VAL_PI) {
+    if (!val_is(type->dom, OP_U256))
+      return diag_fail(m->diag, "REFUSE_LOWER", "init", "the argument of init is not a U256; a build reads one U256 argument (the side value)") + 1;
+    type = closure_apply(m, type, val_var(m, 0));
+    if (type == NULL) return 1;
+    if (type->kind == VAL_PI)
+      return diag_fail(m->diag, "REFUSE_LOWER", "init", "init has two or more arguments; a build reads one U256 argument (the side value)") + 1;
+  }
   if (!val_is(type, OP_FAMILY) || type->inst != m->state_family)
     return diag_fail(m->diag, "REFUSE_LOWER", "init", "the type of init is not the state") + 1;
   const CtorInfo *ci = &m->ctors[m->families[m->state_family].first_ctor];
@@ -956,6 +974,9 @@ static int lower_contract(Machine *m, IrProgram *program, const char **kinds, Pa
   m->def = "init";
   m->fuel = EVAL_FUEL_STEPS;
   const Value *state = def_value(m, init);
+  const Value *type = m->defs[init].type;
+  /* init : U256 -> State: the state at the variable 0, the side value. */
+  if (state != NULL && type != NULL && type->kind == VAL_PI) state = apply_value(m, state, val_var(m, 0));
   if (state == NULL) return 1;
   if (!val_is(state, OP_CTOR) || state->argc != ci->field_count)
     return diag_fail(m->diag, "REFUSE_LOWER", "init", "the value of init is not a closed state") + 1;
@@ -992,11 +1013,11 @@ static EvmBuild abi_json_item(FILE *out, size_t index, const char *kind, const c
 int lower_abi(Machine *m, FILE *out, int json) {
   const char **kinds = m->def_count > 0 ? arena_alloc(m->arena, m->def_count * sizeof *kinds) : NULL;
   IrProgram program = {NULL, 0};
-  Pairs pairs = {NULL, 0};
+  Pairs pairs = {NULL, 0, 0, {0}};
   if (m->def_count > 0 && kinds == NULL) return build_status(m, EVM_BUILD_OOM);
   int refused = lower_contract(m, &program, kinds, &pairs);
   if (refused != 0) return refused;
-  EvmBuild checked = evm_build(&program, (const unsigned char (*)[64])pairs.at, pairs.count, TARGET_PART_MAIN, NULL);
+  EvmBuild checked = evm_build(&program, (const unsigned char (*)[64])pairs.at, pairs.count, pairs.has_arg ? pairs.arg : NULL, TARGET_PART_MAIN, NULL);
   if (checked != EVM_BUILD_OK) return build_status(m, checked);
   size_t index = 0;
   if (json) fputc('[', out);
@@ -1022,8 +1043,8 @@ int lower_abi(Machine *m, FILE *out, int json) {
 
 int lower_build(Machine *m, TargetPart part, FILE *out) {
   IrProgram program = {NULL, 0};
-  Pairs pairs = {NULL, 0};
+  Pairs pairs = {NULL, 0, 0, {0}};
   int refused = lower_contract(m, &program, NULL, &pairs);
   if (refused != 0) return refused;
-  return build_status(m, evm_build(&program, (const unsigned char (*)[64])pairs.at, pairs.count, part, out));
+  return build_status(m, evm_build(&program, (const unsigned char (*)[64])pairs.at, pairs.count, pairs.has_arg ? pairs.arg : NULL, part, out));
 }

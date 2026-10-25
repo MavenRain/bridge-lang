@@ -26,13 +26,16 @@ typedef enum {
    PAIRS holds COUNT
    storage words: bytes 0 to 31 the slot, bytes 32 to 63 the value, both
    big-endian. The creation code stores each pair with a value that is not
-   zero (PUSH value, PUSH slot, SSTORE), then returns the runtime code. The
+   zero (PUSH value, PUSH slot, SSTORE). When ARG is not NULL, it also
+   stores the last 32 bytes of its own code (the word that the deployer
+   appends, Q-S10-5) at the slot ARG, requiring exactly one appended word.
+   Then it returns the runtime code. The
    runtime code is the dispatcher head, the shared REVERT and Trap() blocks
    and one block per entry or view. TARGET_PART_RUNTIME writes only
    that runtime, without assembling or applying size limits to creation code.
    When OUT is NULL, performs the same validation without writing the hex line. */
-EvmBuild evm_build(const IrProgram *prog, const unsigned char (*pairs)[64], size_t count, TargetPart part,
-                   FILE *out);
+EvmBuild evm_build(const IrProgram *prog, const unsigned char (*pairs)[64], size_t count,
+                   const unsigned char *arg, TargetPart part, FILE *out);
 
 /* Writes one `langc abi` line on OUT (C-K4-16): `0xSELECTOR NAME(TYPES)
    KIND`. KIND is "entry", "view" or "event". The selector is the first 4

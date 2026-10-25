@@ -1,0 +1,338 @@
+-- The twin contract (S10 s2, map D1, Q-S10-2 (a), Q-S10-3 (a)). One bytecode, two deployments:
+-- side 0 (home) and side 1 (remote). The init argument is the side (Q-S10-5 (a)).
+-- Home: castSlot k times, then cast; close one slot per call; enact on the stored Decision.
+-- Remote: enact with the Schnorr attest. Both: deposit, seal, accept, claim.
+-- A kit file is checked alone (O64). So the defs are copies of examples/cast.lang,
+-- examples/elgamal.lang, examples/enact.lang and examples/bridge.lang. Each entry has 30 words at most.
+
+def Point : Type 0 := Prod U256 U256
+def Key : Type 0 := Prod U256 U256
+def Cipher : Type 0 := Prod Point Point
+def gen : Point := pair 1u 2u
+def rMinusOne : U256 := 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000000u
+-- -G = (r - 1) G = (1, p - 2).
+def negG : Point := pair 1u 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd45u
+def maxWord : U256 := 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffu
+def randTag : U256 := 0x72616e64u
+def onehotTag : U256 := 0x6f6e65686f74u
+
+-- Two points are equal when both coordinates are equal.
+def ptEq : Point -> Point -> Flag := fun (a : Point) (b : Point) =>
+  flagIf (u256Eq (first a) (first b)) (u256Eq (second a) (second b)) flagNo
+
+-- The ring (examples/ballot.lang). The key image I is the last two words of a
+-- signature. The fold visits the tail first.
+def imgStep : U256 -> Prod U256 Key -> Prod U256 Key := fun (w : U256) (r : Prod U256 Key) =>
+  flagIf (u256Eq (first r) 0u) (pair 1u (pair 0u w))
+    (flagIf (u256Eq (first r) 1u) (pair 2u (pair w (second (second r)))) r)
+def sigImage : List U256 -> Key := fun (s : List U256) => second (fold imgStep (pair 0u (pair 0u 0u)) s)
+def spentHas : Key -> List Key -> Flag := fun (i : Key) (l : List Key) =>
+  fold (fun (j : Key) (r : Flag) => flagIf (ptEq i j) flagYes r) flagNo l
+def fresh : Key -> List Key -> Flag := fun (i : Key) (l : List Key) => flagIf (spentHas i l) flagNo flagYes
+-- The voter ring is the curve keys of the test keys 0, 1 and 2.
+def voters : List Key := cons (ecMul gen (zkKey 0)) (cons (ecMul gen (zkKey 1)) (cons (ecMul gen (zkKey 2)) nil))
+def ballotPollOf : U256 -> U256 := fun (n : U256) => hash 0x62616c6c6f74u n
+
+-- The ciphers (examples/elgamal.lang). The sum of two ciphers encrypts the sum
+-- of the messages. The holder of x gets m G as C2 minus x C1.
+def elgAdd : Cipher -> Cipher -> Cipher := fun (a : Cipher) (b : Cipher) =>
+  pair (ecAdd (first a) (first b)) (ecAdd (second a) (second b))
+def elgPoint : U256 -> Cipher -> Point := fun (x : U256) (c : Cipher) =>
+  ecAdd (second c) (ecMul (ecMul (first c) x) rMinusOne)
+def elgIs : U256 -> Cipher -> U256 -> Flag := fun (x : U256) (c : Cipher) (m : U256) =>
+  ptEq (elgPoint x c) (ecMul gen m)
+
+-- The Decision word (examples/enact.lang): keep, addLiq (dx, dy) or removeLiq (dx, dy).
+def LiqW : Type 0 := Sum (Prod U256 U256) (Prod U256 U256)
+def DecisionW : Type 0 := Sum Unit LiqW
+def addW : U256 -> U256 -> DecisionW := fun (dx dy : U256) => inr (inl (pair dx dy))
+def removeW : U256 -> U256 -> DecisionW := fun (dx dy : U256) => inr (inr (pair dx dy))
+def decisionWord : DecisionW -> U256 := fun (d : DecisionW) =>
+  either (fun (u : Unit) => hash (hash 0u 0u) 0u)
+    (fun (l : LiqW) => either (fun (a : Prod U256 U256) => hash (hash 1u (first a)) (second a))
+      (fun (a : Prod U256 U256) => hash (hash 2u (first a)) (second a)) l) d
+
+-- The one-hot proofs (examples/onehot.lang). z P = A + e Q: 2 ecMul, 1 ecAdd.
+def holds : (p a q : Prod U256 U256) -> (z e : U256) -> Flag :=
+  fun (p a q : Prod U256 U256) (z e : U256) => ptEq (ecMul p z) (ecAdd a (ecMul q e))
+def randChallenge : (ctx pkx pky c1x c1y c2x c2y m ax ay bx by : U256) -> U256 :=
+  fun (ctx pkx pky c1x c1y c2x c2y m ax ay bx by : U256) =>
+    hash (hash (hash (hash (hash (hash (hash (hash (hash (hash (hash (hash randTag ctx) pkx) pky) c1x) c1y) c2x) c2y) m) ax) ay) bx) by
+def orChallenge : (ctx j pkx pky c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y : U256) -> U256 :=
+  fun (ctx j pkx pky c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y : U256) =>
+    hash (hash (hash (hash (hash (hash (hash (hash (hash (hash (hash (hash (hash (hash (hash (hash onehotTag ctx) j) pkx) pky) c1x) c1y) c2x) c2y) a0x) a0y) b0x) b0y) a1x) a1y) b1x) b1y
+def randWith : (pkx pky c1x c1y c2x c2y m ax ay bx by z e : U256) -> Flag :=
+  fun (pkx pky c1x c1y c2x c2y m ax ay bx by z e : U256) =>
+    flagIf (holds gen (pair ax ay) (pair c1x c1y) z e)
+      (holds (pair pkx pky) (pair bx by) (ecAdd (pair c2x c2y) (ecMul negG m)) z e)
+      flagNo
+def rand : (ctx pkx pky c1x c1y c2x c2y m ax ay bx by z : U256) -> Flag :=
+  fun (ctx pkx pky c1x c1y c2x c2y m ax ay bx by z : U256) =>
+    randWith pkx pky c1x c1y c2x c2y m ax ay bx by z (randChallenge ctx pkx pky c1x c1y c2x c2y m ax ay bx by)
+-- e0 + e1 = e modulo 2^256 with no add (u256Add traps on an overflow).
+def splitOk : (e e0 e1 : U256) -> Flag :=
+  fun (e e0 e1 : U256) =>
+    flagIf (u256Le e0 e) (u256Eq (u256Sub e e0) e1)
+      (flagIf (u256Le 1u e1) (u256Eq (u256Sub e1 1u) (u256Sub maxWord (u256Sub e0 e))) flagNo)
+def slotWith : (pkx pky c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y e0 e1 z0 z1 e : U256) -> Flag :=
+  fun (pkx pky c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y e0 e1 z0 z1 e : U256) =>
+    flagIf (splitOk e e0 e1)
+      (flagIf (holds gen (pair a0x a0y) (pair c1x c1y) z0 e0)
+        (flagIf (holds (pair pkx pky) (pair b0x b0y) (pair c2x c2y) z0 e0)
+          (flagIf (holds gen (pair a1x a1y) (pair c1x c1y) z1 e1)
+            (holds (pair pkx pky) (pair b1x b1y) (ecAdd (pair c2x c2y) negG) z1 e1)
+            flagNo)
+          flagNo)
+        flagNo)
+      flagNo
+def slot : (ctx j pkx pky c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y e0 e1 z0 z1 : U256) -> Flag :=
+  fun (ctx j pkx pky c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y e0 e1 z0 z1 : U256) =>
+    slotWith pkx pky c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y e0 e1 z0 z1
+      (orChallenge ctx j pkx pky c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y)
+
+-- A slot proof is (A0, B0), (A1, B1), (e0, e1) and (z0, z1). A sum proof is
+-- (A, B) and z. The committee key is 7 (examples/elgamal.lang, Q-S10-4 (a)).
+def SlotPf : Type 0 := Prod (Prod Point Point) (Prod (Prod Point Point) (Prod (Prod U256 U256) (Prod U256 U256)))
+def SumPf : Type 0 := Prod (Prod Point Point) U256
+def pk : Point := ecMul gen 7u
+def slotPf : U256 -> U256 -> Cipher -> SlotPf -> Flag := fun (ctx j : U256) (c : Cipher) (q : SlotPf) =>
+  slot ctx j (first pk) (second pk) (first (first c)) (second (first c)) (first (second c)) (second (second c))
+    (first (first (first q))) (second (first (first q))) (first (second (first q))) (second (second (first q)))
+    (first (first (first (second q)))) (second (first (first (second q))))
+    (first (second (first (second q)))) (second (second (first (second q))))
+    (first (first (second (second q)))) (second (first (second (second q))))
+    (first (second (second (second q)))) (second (second (second (second q))))
+def sumPf : U256 -> Cipher -> SumPf -> Flag := fun (ctx : U256) (c : Cipher) (q : SumPf) =>
+  rand ctx (first pk) (second pk) (first (first c)) (second (first c)) (first (second c)) (second (second c)) 1u
+    (first (first (first q))) (second (first (first q))) (first (second (first q))) (second (second (first q)))
+    (second q)
+
+-- w is the hash chain of the 8 ciphertext coordinates, slot 0 first.
+def ctWord : Cipher -> Cipher -> U256 := fun (c0 c1 : Cipher) =>
+  hash (hash (hash (hash (hash (hash (hash (first (first c0)) (second (first c0))) (first (second c0))) (second (second c0)))
+    (first (first c1))) (second (first c1))) (first (second c1))) (second (second c1))
+def ctxOf : Key -> U256 -> U256 := fun (i : Key) (n : U256) => hash (hash (first i) (second i)) n
+def pollWord : U256 -> U256 -> U256 := fun (n p : U256) => hash (ballotPollOf n) p
+
+-- A CastBox is one poll: the poll n, the tally of each slot and the spent list.
+def CastBox : Type 0 := Prod U256 (Prod (Prod Cipher Cipher) (List Key))
+def castPoll : CastBox -> U256 := fun (box : CastBox) => first box
+def castTally : CastBox -> Prod Cipher Cipher := fun (box : CastBox) => first (second box)
+def castSpent : CastBox -> List Key := fun (box : CastBox) => second (second box)
+-- The tally starts at (O, O) in each slot: ecAdd takes (0, 0) as O.
+def zeroC : Cipher := pair (pair 0u 0u) (pair 0u 0u)
+def emptyCast : U256 -> CastBox := fun (n : U256) => pair n (pair (pair zeroC zeroC) nil)
+
+-- One cast: the ring signature over w at the poll word, a fresh key image,
+-- the two slot proofs and the sum proof, all at the bound ctx.
+def castOk : CastBox -> U256 -> Cipher -> Cipher -> SlotPf -> SlotPf -> SumPf -> List U256 -> Flag :=
+  fun (box : CastBox) (p : U256) (c0 c1 : Cipher) (q0 q1 : SlotPf) (qs : SumPf) (s : List U256) =>
+    flagIf (zkVerify voters (pollWord (castPoll box) p) (ctWord c0 c1) s)
+      (flagIf (fresh (sigImage s) (castSpent box))
+        (flagIf (slotPf (ctxOf (sigImage s) (castPoll box)) 0u c0 q0)
+          (flagIf (slotPf (ctxOf (sigImage s) (castPoll box)) 1u c1 q1)
+            (sumPf (ctxOf (sigImage s) (castPoll box)) (elgAdd c0 c1) qs)
+            flagNo)
+          flagNo)
+        flagNo)
+      flagNo
+-- The box after a cast: each slot is added to its tally, and the key image goes to the spent list.
+def castNext : CastBox -> Cipher -> Cipher -> List U256 -> CastBox :=
+  fun (box : CastBox) (c0 c1 : Cipher) (s : List U256) =>
+    pair (castPoll box)
+      (pair (pair (elgAdd (first (castTally box)) c0) (elgAdd (second (castTally box)) c1))
+        (cons (sigImage s) (castSpent box)))
+-- The word form: a cast that fails keeps the box.
+def castW : CastBox -> U256 -> Cipher -> Cipher -> SlotPf -> SlotPf -> SumPf -> List U256 -> CastBox :=
+  fun (box : CastBox) (p : U256) (c0 c1 : Cipher) (q0 q1 : SlotPf) (qs : SumPf) (s : List U256) =>
+    flagIf (castOk box p c0 c1 q0 q1 qs s) (castNext box c0 c1 s) box
+-- The typed form: the cast needs a proof that castOk holds.
+def CastSig : CastBox -> U256 -> Cipher -> Cipher -> SlotPf -> SlotPf -> SumPf -> List U256 -> Type 0 :=
+  fun (box : CastBox) (p : U256) (c0 c1 : Cipher) (q0 q1 : SlotPf) (qs : SumPf) (s : List U256) =>
+    Path Flag (castOk box p c0 c1 q0 q1 qs s) flagYes
+def castTyped : (box : CastBox) -> (p : U256) -> (c0 c1 : Cipher) -> (q0 q1 : SlotPf) -> (qs : SumPf) -> (s : List U256) -> CastSig box p c0 c1 q0 q1 qs s -> CastBox :=
+  fun (box : CastBox) (p : U256) (c0 c1 : Cipher) (q0 q1 : SlotPf) (qs : SumPf) (s : List U256) (h : CastSig box p c0 c1 q0 q1 qs s) =>
+    castNext box c0 c1 s
+
+-- The threshold open, the DLEQ proof and the attest (copies of examples/elgamal.lang, g is gen).
+
+def lag12 : Point -> Point -> Point := fun (d1 : Point) (d2 : Point) =>
+  ecAdd (ecMul d1 2u) (ecMul d2 rMinusOne)
+def openPoint : Point -> Point -> Cipher -> Point := fun (d1 : Point) (d2 : Point) (c : Cipher) =>
+  ecAdd (second c) (ecMul (lag12 d1 d2) rMinusOne)
+def openIs : Point -> Point -> Cipher -> U256 -> Flag := fun (d1 : Point) (d2 : Point) (c : Cipher) (m : U256) =>
+  ptEq (openPoint d1 d2 c) (ecMul gen m)
+def hashPt : Point -> U256 := fun (q : Point) => hash (first q) (second q)
+def dleqC : Point -> Point -> Point -> Point -> Point -> U256 := fun (a : Point) (b : Point) (x : Point) (c1 : Point) (d : Point) =>
+  hash (hash (hashPt a) (hashPt b)) (hash (hashPt x) (hash (hashPt c1) (hashPt d)))
+def dleqOk : Point -> Point -> Point -> Prod (Prod Point Point) U256 -> Flag :=
+  fun (x : Point) (c1 : Point) (d : Point) (p : Prod (Prod Point Point) U256) =>
+    flagIf (ptEq (ecMul gen (second p)) (ecAdd (first (first p)) (ecMul x (dleqC (first (first p)) (second (first p)) x c1 d))))
+      (ptEq (ecMul c1 (second p)) (ecAdd (second (first p)) (ecMul d (dleqC (first (first p)) (second (first p)) x c1 d))))
+      flagNo
+def attestMsg : U256 -> U256 -> U256 -> U256 := fun (side : U256) (n : U256) (d : U256) => hash (hash side n) d
+def schnorrOk : Point -> U256 -> Prod Point U256 -> Flag := fun (y : Point) (msg : U256) (sig : Prod Point U256) =>
+  ptEq (ecMul gen (second sig)) (ecAdd (first sig) (ecMul y (hash (hash (hashPt (first sig)) (hashPt y)) msg)))
+
+-- The pool checks and prices (copies of examples/enact.lang).
+
+-- mul, divFloor and divCeil on the kit primitives u256Mul and u256Div (Q-S10-9 (a)). The fold defs of
+-- examples/enact.lang do not lower. u256Mul traps on an overflow and u256Div traps on 0, as the fold defs do.
+def mul : U256 -> U256 -> U256 := fun (a b : U256) => u256Mul a b
+def divFloor : U256 -> U256 -> U256 := fun (n d : U256) => u256Div n d
+def divCeil : U256 -> U256 -> U256 := fun (n d : U256) =>
+  u256Add (divFloor n d) (flagIf (u256Eq (mul (divFloor n d) d) n) 0u 1u)
+
+def wMax : U256 := 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffu
+def bound : U256 := 0xffffffffffffffffffffffffffffffffu
+def outIn : (x y dx : U256) -> U256 := fun (x y dx : U256) => divFloor (mul y dx) (u256Add x dx)
+def inOut : (x y c : U256) -> U256 := fun (x y c : U256) => divCeil (mul x c) (u256Sub y c)
+def addOk : U256 -> U256 -> U256 -> U256 -> Flag := fun (x y dx dy : U256) =>
+  flagIf (u256Le 1u dx) (flagIf (u256Le 1u dy)
+    (flagIf (u256Le (mul dx y) (mul dy x))
+      (u256Le (u256Add (mul dy x) 1u) (u256Add (mul dx y) x)) flagNo) flagNo) flagNo
+def removeOk : U256 -> U256 -> U256 -> U256 -> Flag := fun (x y dx dy : U256) =>
+  flagIf (u256Le (u256Add dx 1u) x)
+    (flagIf (u256Le (mul dy x) (mul dx y))
+      (u256Le (u256Add (mul dx y) 1u) (u256Add (mul dy x) x)) flagNo) flagNo
+
+-- The pool words per coordinate (the words of addLiqW, removeLiqW, swapOutW and claimW in examples/enact.lang
+-- and examples/bridge.lang). K4c does not lower first at a word position. Thus each coordinate is a word def.
+-- resTrap x y is 0. It traps when x or y is not in 1..bound (the check of checkedReserves). Each coordinate
+-- checks the two words, so a projection cannot skip the check in the lazy evaluator.
+def resTrap : U256 -> U256 -> U256 := fun (x y : U256) =>
+  u256Sub (u256Add wMax (flagIf (u256Le 1u x) (flagIf (u256Le x bound) (flagIf (u256Le 1u y) (flagIf (u256Le y bound) 0u 1u) 1u) 1u) 1u)) wMax
+def checkedX : U256 -> U256 -> U256 := fun (x y : U256) => u256Add (resTrap x y) x
+def checkedY : U256 -> U256 -> U256 := fun (x y : U256) => u256Add (resTrap x y) y
+def addLiqX : (x y dx dy : U256) -> U256 := fun (x y dx dy : U256) => checkedX (u256Add x dx) (u256Add y dy)
+def addLiqY : (x y dx dy : U256) -> U256 := fun (x y dx dy : U256) => checkedY (u256Add x dx) (u256Add y dy)
+def removeLiqX : (x y dx dy : U256) -> U256 := fun (x y dx dy : U256) => checkedX (u256Sub x dx) (u256Sub y dy)
+def removeLiqY : (x y dx dy : U256) -> U256 := fun (x y dx dy : U256) => checkedY (u256Sub x dx) (u256Sub y dy)
+def swapOutX : (x y c : U256) -> U256 := fun (x y c : U256) => checkedX (u256Add x (inOut x y c)) (u256Sub y c)
+def swapOutY : (x y c : U256) -> U256 := fun (x y c : U256) => checkedY (u256Add x (inOut x y c)) (u256Sub y c)
+def claimX : (x y c : U256) -> U256 := fun (x y c : U256) => checkedX (u256Sub x (outIn y x c)) (u256Add y c)
+def claimY : (x y c : U256) -> U256 := fun (x y c : U256) => checkedY (u256Sub x (outIn y x c)) (u256Add y c)
+
+def asset : Addr := 0x00000000000000000000000000000000000000ee
+def vault : Addr := 0x00000000000000000000000000000000000000cc
+def batchSeed : U256 -> U256 := fun (n : U256) => hash 0x6261746368u n
+
+event Sealed (from : U256) (n : U256) (h : U256)
+event Claimed (image : U256) (d : U256)
+
+-- The storage (map D1). The side is the init argument (Q-S10-5 (a)). The reserves start at (1000, 1000).
+state State := makeState (side : U256) (slots : Map U256 U256) (tally : Map U256 U256) (used : Map U256 Flag) (props : Map U256 U256) (casts : U256) (opened : Map U256 U256) (decided : Map U256 U256) (enacted : Map U256 Flag) (rx : U256) (ry : U256) (batchH : U256) (batchN : U256) (sealAt : Nat) (accepted : Map U256 Flag) (claimed : Map U256 Flag) (batchSize : U256) (batchCredit : U256)
+def init : U256 -> State := fun (x : U256) =>
+  makeState x mapEmpty mapEmpty mapEmpty mapEmpty 0u mapEmpty mapEmpty mapEmpty 1000u 1000u (batchSeed 0u) 0u 0 mapEmpty mapEmpty 0u 0u
+
+-- Entry (home): one slot OR proof at ctx. It stores the hash of the slot cipher under (ctx, j).
+def castSlot : (env : Env) -> (s : State) -> (n j ix iy c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y e0 e1 z0 z1 : U256) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) (n j ix iy c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y e0 e1 z0 z1 : U256) =>
+    flagIf (flagIf (u256Eq (side s) 0u) (u256Eq (mapGet (opened s) (hash n 0u)) 0u) flagNo)
+      (flagIf (u256Le j 1u)
+      (flagIf (slot (ctxOf (pair ix iy) n) j (first pk) (second pk) c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y e0 e1 z0 z1)
+      (some (pair (makeState (side s) (mapSet (slots s) (hash (ctxOf (pair ix iy) n) j) (hash (hash (hash c1x c1y) c2x) c2y)) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (rx s) (ry s) (batchH s) (batchN s) (sealAt s) (accepted s) (claimed s) (batchSize s) (batchCredit s)) nil))
+      none)
+      none)
+      none
+
+-- Entry (home): the ring signature over w of the two stored slots, a fresh key image per poll,
+-- the proposal word of the first cast of the poll, the sum proof and the tally add.
+def cast : (env : Env) -> (s : State) -> (n p a0 a1 a2 a3 b0 b1 b2 b3 ax ay bx by z w0 w1 w2 w3 w4 w5 : U256) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) (n p a0 a1 a2 a3 b0 b1 b2 b3 ax ay bx by z w0 w1 w2 w3 w4 w5 : U256) =>
+    flagIf (flagIf (u256Eq (side s) 0u) (u256Eq (mapGet (opened s) (hash n 0u)) 0u) flagNo)
+      (flagIf (zkVerify voters (pollWord n p) (ctWord (pair (pair a0 a1) (pair a2 a3)) (pair (pair b0 b1) (pair b2 b3))) (cons w0 (cons w1 (cons w2 (cons w3 (cons w4 (cons w5 nil)))))))
+      (flagIf (u256Eq (mapGet (slots s) (hash (ctxOf (pair w4 w5) n) 0u)) (hash (hash (hash a0 a1) a2) a3))
+      (flagIf (u256Eq (mapGet (slots s) (hash (ctxOf (pair w4 w5) n) 1u)) (hash (hash (hash b0 b1) b2) b3))
+      (flagIf (flagIf (mapGet (used s) (ctxOf (pair w4 w5) n)) flagNo flagYes)
+      (flagIf (flagIf (u256Eq (mapGet (props s) n) 0u) flagYes (u256Eq (mapGet (props s) n) p))
+      (flagIf (sumPf (ctxOf (pair w4 w5) n) (elgAdd (pair (pair a0 a1) (pair a2 a3)) (pair (pair b0 b1) (pair b2 b3))) (pair (pair (pair ax ay) (pair bx by)) z))
+      (some (pair (makeState (side s) (slots s) (mapSet (mapSet (mapSet (mapSet (mapSet (mapSet (mapSet (mapSet (tally s) (hash n 0u) (first (ecAdd (pair (mapGet (tally s) (hash n 0u)) (mapGet (tally s) (hash n 1u))) (pair a0 a1)))) (hash n 1u) (second (ecAdd (pair (mapGet (tally s) (hash n 0u)) (mapGet (tally s) (hash n 1u))) (pair a0 a1)))) (hash n 2u) (first (ecAdd (pair (mapGet (tally s) (hash n 2u)) (mapGet (tally s) (hash n 3u))) (pair a2 a3)))) (hash n 3u) (second (ecAdd (pair (mapGet (tally s) (hash n 2u)) (mapGet (tally s) (hash n 3u))) (pair a2 a3)))) (hash n 4u) (first (ecAdd (pair (mapGet (tally s) (hash n 4u)) (mapGet (tally s) (hash n 5u))) (pair b0 b1)))) (hash n 5u) (second (ecAdd (pair (mapGet (tally s) (hash n 4u)) (mapGet (tally s) (hash n 5u))) (pair b0 b1)))) (hash n 6u) (first (ecAdd (pair (mapGet (tally s) (hash n 6u)) (mapGet (tally s) (hash n 7u))) (pair b2 b3)))) (hash n 7u) (second (ecAdd (pair (mapGet (tally s) (hash n 6u)) (mapGet (tally s) (hash n 7u))) (pair b2 b3)))) (mapSet (used s) (ctxOf (pair w4 w5) n) flagYes) (mapSet (props s) n p) (u256Add (casts s) 1u) (opened s) (decided s) (enacted s) (rx s) (ry s) (batchH s) (batchN s) (sealAt s) (accepted s) (claimed s) (batchSize s) (batchCredit s)) nil))
+      none)
+      none)
+      none)
+      none)
+      none)
+      none)
+      none
+
+-- Entry (home): open one slot of the tally of poll n with the shares 1 and 2 (DLEQ, lag12).
+-- Opening freezes the poll. Counts are bounded by the three voters and stored plus 1. The last slot (j = 1) stores the Decision word:
+-- the proposal word when slot 0 has 2 votes or more, else the keep word.
+def close : (env : Env) -> (s : State) -> (n j e1x e1y a1x a1y b1x b1y z1 e2x e2y a2x a2y b2x b2y z2 m : U256) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) (n j e1x e1y a1x a1y b1x b1y z1 e2x e2y a2x a2y b2x b2y z2 m : U256) =>
+    flagIf (u256Eq (side s) 0u)
+      (flagIf (flagIf (u256Le j 1u) (u256Le m 3u) flagNo)
+      (flagIf (u256Eq (mapGet (opened s) (hash n j)) 0u)
+      (flagIf (flagIf (u256Eq j 0u) flagYes (flagIf (u256Eq (mapGet (opened s) (hash n 0u)) 0u) flagNo flagYes))
+      (flagIf (dleqOk (ecMul gen 12u) (pair (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 0u))) (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 1u)))) (pair e1x e1y) (pair (pair (pair a1x a1y) (pair b1x b1y)) z1))
+      (flagIf (dleqOk (ecMul gen 17u) (pair (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 0u))) (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 1u)))) (pair e2x e2y) (pair (pair (pair a2x a2y) (pair b2x b2y)) z2))
+      (flagIf (openIs (pair e1x e1y) (pair e2x e2y) (pair (pair (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 0u))) (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 1u)))) (pair (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 2u))) (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 3u))))) m)
+      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (mapSet (opened s) (hash n j) (u256Add m 1u)) (mapSet (decided s) n (flagIf (u256Eq j 1u) (flagIf (u256Le 3u (mapGet (opened s) (hash n 0u))) (mapGet (props s) n) (hash (hash 0u 0u) 0u)) (mapGet (decided s) n))) (enacted s) (rx s) (ry s) (batchH s) (batchN s) (sealAt s) (accepted s) (claimed s) (batchSize s) (batchCredit s)) nil))
+      none)
+      none)
+      none)
+      none)
+      none)
+      none)
+      none
+
+-- Entry: run the Decision (tag 0 keep, 1 addLiq, 2 removeLiq) of proposal n once. Home: the
+-- stored Decision word. Remote: the Schnorr attest of attestMsg 0u n word (key 7).
+def enact : (env : Env) -> (s : State) -> (n tag dx dy sx sy ss : U256) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) (n tag dx dy sx sy ss : U256) =>
+    flagIf (flagIf (mapGet (enacted s) n) flagNo flagYes)
+      (flagIf (u256Le tag 2u)
+      (flagIf (flagIf (u256Eq (side s) 0u) (u256Eq (mapGet (decided s) n) (hash (hash tag dx) dy)) (schnorrOk pk (attestMsg 0u n (hash (hash tag dx) dy)) (pair (pair sx sy) ss)))
+      (flagIf (flagIf (u256Eq tag 0u) (flagIf (u256Eq dx 0u) (u256Eq dy 0u) flagNo) (flagIf (u256Eq tag 1u) (addOk (rx s) (ry s) dx dy) (removeOk (rx s) (ry s) dx dy)))
+      (flagIf (u256Le 1u (flagIf (u256Eq tag 1u) (addLiqX (rx s) (ry s) dx dy) (flagIf (u256Eq tag 2u) (removeLiqX (rx s) (ry s) dx dy) (rx s))))
+      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (mapSet (enacted s) n flagYes) (flagIf (u256Eq tag 1u) (addLiqX (rx s) (ry s) dx dy) (flagIf (u256Eq tag 2u) (removeLiqX (rx s) (ry s) dx dy) (rx s))) (flagIf (u256Eq tag 1u) (addLiqY (rx s) (ry s) dx dy) (flagIf (u256Eq tag 2u) (removeLiqY (rx s) (ry s) dx dy) (ry s))) (batchH s) (batchN s) (sealAt s) (accepted s) (claimed s) (batchSize s) (batchCredit s)) nil))
+      none)
+      none)
+      none)
+      none)
+      none
+
+-- Entry: buy the credit c (10 or 100) out of the pool for the key (kx, ky). The key and c go
+-- into the hash chain of the open batch. A batch has exactly three deposits of one credit.
+def deposit : (env : Env) -> (s : State) -> (kx ky c : U256) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) (kx ky c : U256) =>
+    flagIf (flagIf (u256Le (batchSize s) 2u) (flagIf (u256Eq (batchSize s) 0u) (flagIf (u256Eq c 10u) flagYes (u256Eq c 100u)) (u256Eq c (batchCredit s))) flagNo)
+      (flagIf (u256Le (u256Add c 1u) (ry s))
+      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (swapOutX (rx s) (ry s) c) (swapOutY (rx s) (ry s) c) (hash (hash (hash (batchH s) kx) ky) c) (batchN s) (sealAt s) (accepted s) (claimed s) (u256Add (batchSize s) 1u) c) (cons (pull asset (caller env) vault (inOut (rx s) (ry s) c)) nil)))
+      none)
+      none
+
+-- Entry: seal a full batch when now is at the stored bound or later (Q-S10-6 (a)).
+def seal : (env : Env) -> (s : State) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) =>
+    flagIf (flagIf (u256Eq (batchSize s) 3u) (natLe (sealAt s) (now env)) flagNo)
+      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (rx s) (ry s) (batchSeed (u256Add (batchN s) 1u)) (u256Add (batchN s) 1u) (natAdd (now env) 60) (accepted s) (claimed s) 0u 0u) (cons (Sealed (side s) (batchN s) (batchH s)) nil)))
+      none
+
+-- Entry: accept the batch hash h of batch n of the other side with the Schnorr attest (key 7).
+def accept : (env : Env) -> (s : State) -> (n h sx sy ss : U256) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) (n h sx sy ss : U256) =>
+    flagIf (flagIf (mapGet (accepted s) h) flagNo flagYes)
+      (flagIf (schnorrOk pk (attestMsg (u256Sub 1u (side s)) n h) (pair (pair sx sy) ss))
+      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (rx s) (ry s) (batchH s) (batchN s) (sealAt s) (mapSet (accepted s) h flagYes) (claimed s) (batchSize s) (batchCredit s)) nil))
+      none)
+      none
+
+-- Entry: claim the credit d from accepted batch n of 3 deposits of d. The key image is fresh per
+-- batch. No ring signature on the EVM in s2 (Q-S10-10 (b) shape under Q-S10-11 (c)): at ring 3 it is
+-- over EIP-170. The kit eval keeps it (examples/bridge.lang).
+def claim : (env : Env) -> (s : State) -> (n d k0x k0y k1x k1y k2x k2y w4 w5 : U256) -> Option (Prod State (List Out)) :=
+  fun (env : Env) (s : State) (n d k0x k0y k1x k1y k2x k2y w4 w5 : U256) =>
+    flagIf (mapGet (accepted s) (hash (hash (hash (hash (hash (hash (hash (hash (hash (batchSeed n) k0x) k0y) d) k1x) k1y) d) k2x) k2y) d))
+      (flagIf (flagIf (mapGet (claimed s) (hash (hash w4 w5) (hash (hash (hash (hash (hash (hash (hash (hash (hash (batchSeed n) k0x) k0y) d) k1x) k1y) d) k2x) k2y) d))) flagNo flagYes)
+      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (claimX (rx s) (ry s) d) (claimY (rx s) (ry s) d) (batchH s) (batchN s) (sealAt s) (accepted s) (mapSet (claimed s) (hash (hash w4 w5) (hash (hash (hash (hash (hash (hash (hash (hash (hash (batchSeed n) k0x) k0y) d) k1x) k1y) d) k2x) k2y) d)) flagYes) (batchSize s) (batchCredit s)) (cons (pay asset (caller env) (outIn (ry s) (rx s) d)) (cons (Claimed (hash w4 w5) d) nil))))
+      none)
+      none
+
+-- Views.
+def sideOf : (env : Env) -> (s : State) -> U256 := fun (env : Env) (s : State) => side s
+def rxOf : (env : Env) -> (s : State) -> U256 := fun (env : Env) (s : State) => rx s
+def ryOf : (env : Env) -> (s : State) -> U256 := fun (env : Env) (s : State) => ry s
+def decidedOf : (env : Env) -> (s : State) -> (n : U256) -> U256 := fun (env : Env) (s : State) (n : U256) => mapGet (decided s) n
+def openedOf : (env : Env) -> (s : State) -> (n j : U256) -> U256 := fun (env : Env) (s : State) (n j : U256) => mapGet (opened s) (hash n j)

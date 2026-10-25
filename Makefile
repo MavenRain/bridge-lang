@@ -100,6 +100,7 @@ check-clang: build/domain.c
 check: build/langc build/asmtool build/fronttool build/blsagtool build/elgamaltool build/sigmatool build/pathtool build/runtool build/writertool build/slottool build/buildtool build/lowertool build/evmtool build/emittool check-clang
 	sh test/gate.sh
 	sh test/run.sh
+	sh test/twin.sh
 	sh test/asm.sh
 	sh test/build.sh
 	sh test/dispatch.sh

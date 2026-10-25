@@ -1,0 +1,78 @@
+
+-- Close counts are ordinary counts, bounded by the three voters.
+def e : Env := makeEnv 1 0x00000000000000000000000000000000000000aa
+def acceptedResult : Option (Prod State (List Out)) -> Flag := fun (o : Option (Prod State (List Out))) => option flagNo (fun (p : Prod State (List Out)) => flagYes) o
+def closeZero : Flag := acceptedResult (close e (init 0u) 1u 0u 0u 0u 1u 2u 0u 0u 13952815165197967125756980119533420968413717059059621486339195579699957758172u 0u 0u 1u 2u 0u 0u 14701443190095777811686243040802400733041311233058721930520713618723616718186u 0u)
+def closeAlias : Flag := acceptedResult (close e (init 0u) 1u 0u 0u 0u 1u 2u 0u 0u 13952815165197967125756980119533420968413717059059621486339195579699957758172u 0u 0u 1u 2u 0u 0u 14701443190095777811686243040802400733041311233058721930520713618723616718186u 21888242871839275222246405745257275088548364400416034343698204186575808495617u)
+def afterEntry : State -> Option (Prod State (List Out)) -> State := fun (s : State) (o : Option (Prod State (List Out))) => option s (fun (p : Prod State (List Out)) => first p) o
+def oneDeposit : State := afterEntry (init 0u) (deposit e (init 0u) 5u 6u 10u)
+def partialSeal : Flag := acceptedResult (seal e oneDeposit)
+def mixedDeposit : Flag := acceptedResult (deposit e oneDeposit 7u 8u 100u)
+def twoDeposits : State := afterEntry oneDeposit (deposit e oneDeposit 7u 8u 10u)
+def threeDeposits : State := afterEntry twoDeposits (deposit e twoDeposits 9u 10u 10u)
+def fullSeal : Flag := acceptedResult (seal e threeDeposits)
+def fourthDeposit : Flag := acceptedResult (deposit e threeDeposits 11u 12u 10u)
+def afterSeal : State := afterEntry threeDeposits (seal e threeDeposits)
+def again1 : State := afterEntry afterSeal (deposit e afterSeal 5u 6u 10u)
+def again2 : State := afterEntry again1 (deposit e again1 7u 8u 10u)
+def again3 : State := afterEntry again2 (deposit e again2 9u 10u 10u)
+def repeatedRoot : Flag := u256Eq (batchH threeDeposits) (batchH again3)
+
+def v0s0c1x : U256 := 0x19d99b0aa847886456ab1542e0892af1cbbdbb0bcf2481d01e2b064296c94303u
+def v0s0c1y : U256 := 0x2fd4eb33f20c6f14a41809b930381868c0f6e935c2a01c90cc60f8cb7c8505e4u
+def v0s0c2x : U256 := 0x1980da38821659f8ccb15624d9c9cc8b93ea9e959c50ded8875070f3aeeb560au
+def v0s0c2y : U256 := 0x0f323652ef58efea61d5047a4baf177ff6cbeb4aeeb9494e5263a973520c6aa5u
+
+def v0s1c1x : U256 := 0x17632c471eb5baf6f57784c2ab78176caf1845f618f996648f228442cd2a598eu
+def v0s1c1y : U256 := 0x166d6aa743f0e68fa2fdda9a6b3fd6b1e36714bc1ca3d38ae02aefde1c22cccau
+def v0s1c2x : U256 := 0x15f4dc7161f46651e06372db8c9bfe620af3f1409bd7acd053f455151eb324eau
+def v0s1c2y : U256 := 0x0bad8d59bd718ce873d900599e33700188e5d84c175fb6bcbca286ccb4158a89u
+
+def v0sumax : U256 := 0x020bbc199f6eddbf8e89c41e4744bbbad1288e065f6e46531fc30d4430edc32au
+def v0sumay : U256 := 0x00a66f95dbb1eb81d927119805c6d59d7a2225e1feb12659da3867a42293186bu
+def v0sumbx : U256 := 0x09e77fa06e7c943881a2fabd6e0bb659695af8cd836e47786de87f2c739a12d7u
+def v0sumby : U256 := 0x190c88664ffb658cae2efbc71e06990c5939b151ca8befd3727678134022fb5bu
+def v0sumz : U256 := 0x00d4f66dad9a91f726adb1e172afdd0683dab87bc3b76b7e91f0e71fa82c03efu
+
+-- A valid cast from cast.lang, with its signature and sum proof, is refused after opening.
+def ballotWord : U256 := decisionWord (addW 100u 100u)
+def ballotSig : List U256 := zkSign voters (zkKey 0) (pollWord 1u ballotWord)
+  (ctWord (pair (pair v0s0c1x v0s0c1y) (pair v0s0c2x v0s0c2y)) (pair (pair v0s1c1x v0s1c1y) (pair v0s1c2x v0s1c2y)))
+def sigAt : Nat -> U256 := fun (k : Nat) => second (fold
+  (fun (w : U256) (r : Prod Nat U256) => pair (natAdd (first r) 1) (flagIf (natEq (first r) k) w (second r)))
+  (pair 0 0u) ballotSig)
+def ballotSlots : Map U256 U256 := mapSet (mapSet mapEmpty
+  (hash (ctxOf (sigImage ballotSig) 1u) 0u) (hash (hash (hash v0s0c1x v0s0c1y) v0s0c2x) v0s0c2y))
+  (hash (ctxOf (sigImage ballotSig) 1u) 1u) (hash (hash (hash v0s1c1x v0s1c1y) v0s1c2x) v0s1c2y)
+def ballotState : Map U256 U256 -> State := fun (o : Map U256 U256) =>
+  makeState 0u ballotSlots mapEmpty mapEmpty mapEmpty 0u o mapEmpty mapEmpty 1000u 1000u (batchSeed 0u) 0u 0 mapEmpty mapEmpty 0u 0u
+
+def ballot : State -> Flag := fun (s : State) => acceptedResult (cast e s 1u ballotWord
+  v0s0c1x v0s0c1y v0s0c2x v0s0c2y v0s1c1x v0s1c1y v0s1c2x v0s1c2y
+  v0sumax v0sumay v0sumbx v0sumby v0sumz (sigAt 5) (sigAt 4) (sigAt 3) (sigAt 2) (sigAt 1) (sigAt 0))
+def castBeforeOpen : Flag := ballot (ballotState mapEmpty)
+def castAfterOpen : Flag := ballot (ballotState (mapSet mapEmpty (hash 1u 0u) 1u))
+
+def v0s0a0x : U256 := 0x13d5ce32f3a66b0717dbc06317ce53041ee554534b68c1c4ae78f941dd45faccu
+def v0s0a0y : U256 := 0x272cb8aeb9095d2cb0ccdc79c54bc8b6caec78b69cd1dc223291fb6cfe0d08e8u
+def v0s0b0x : U256 := 0x0b09dfb000cd771498bc79276fcb092616c23d1a10da954f813469833725053du
+def v0s0b0y : U256 := 0x0c2cc36910d03e5aaeadb26aee134900e0b38e78542e0e0fe8bb2a3e10c466eau
+def v0s0a1x : U256 := 0x0ad67f67186ebbf5dd1e483efc9376c429eaf0fef3efd5908bf56a81ec4e018eu
+def v0s0a1y : U256 := 0x2796b63957753dd24637291a888c5886a8db9e66d2ea77232e5b4d92c1124255u
+def v0s0b1x : U256 := 0x2fe4aa8cebc255f0677c3e621fe6986bcb06beab67a6282084cb7ce478532330u
+def v0s0b1y : U256 := 0x0fcbdfc91be0ae047ab53ddbb4efb86eb75a1912c70118967a98888edec116fdu
+def v0s0e0 : U256 := 0x574f7d54dda9549b96f0ac86d02bfbd13bcea610fdc82606b5921762e47478bbu
+def v0s0e1 : U256 := 0xe67b1c0ba96362fe32c6a565c757cd324610b9c22f2ff8b8cc70db9251499450u
+def v0s0z0 : U256 := 0x296beb8b5d4d77c21aa7409f1b0f16d46b37275d6125f94736e349c1dca743d8u
+def v0s0z1 : U256 := 0x0b9cf21216fde956722450abf43f4313860162ef2b76dc238d643b45b4a7e5e4u
+
+def slotBallot : State -> Flag := fun (s : State) => acceptedResult (castSlot e s 1u 0u
+  (first (sigImage ballotSig)) (second (sigImage ballotSig)) v0s0c1x v0s0c1y v0s0c2x v0s0c2y
+  v0s0a0x v0s0a0y v0s0b0x v0s0b0y v0s0a1x v0s0a1y v0s0b1x v0s0b1y v0s0e0 v0s0e1 v0s0z0 v0s0z1)
+def slotBeforeOpen : Flag := slotBallot (ballotState mapEmpty)
+def slotAfterOpen : Flag := slotBallot (ballotState (mapSet mapEmpty (hash 1u 0u) 1u))
+
+def acceptedBatch : State := makeState 1u mapEmpty mapEmpty mapEmpty mapEmpty 0u mapEmpty mapEmpty mapEmpty
+  1000u 1000u (batchSeed 0u) 0u 0 (mapSet mapEmpty (batchH threeDeposits) flagYes) mapEmpty 0u 0u
+def claimBatchZero : Flag := acceptedResult (claim e acceptedBatch 0u 10u 5u 6u 7u 8u 9u 10u 3u 4u)
+def claimBatchOne : Flag := acceptedResult (claim e acceptedBatch 1u 10u 5u 6u 7u 8u 9u 10u 3u 4u)

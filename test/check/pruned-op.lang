@@ -1,2 +1,2 @@
--- NAME_UNKNOWN (slice S2, R19): u256Mul is not in the base span. natMul, u256Div and u256Min are also gone.
-def wrong : U256 := u256Mul 1u 2u
+-- NAME_UNKNOWN (slice S2, R19): natMul is not in the base span or the kit. u256Min is also gone. u256Mul and u256Div are kit primitives since S10 s2 (Q-S10-9 (a)).
+def wrong : Nat := natMul 1 2

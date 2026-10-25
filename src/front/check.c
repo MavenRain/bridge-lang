@@ -190,6 +190,8 @@ static const Builtin BUILTINS[] = {
   {"natLe", 2, RULE_NAT2, OP_NAT_LE, OP_FLAG, 0, VIS_INTERNAL},
   {"u256Add", 2, RULE_U256_2, OP_U256_ADD, OP_U256, 0, VIS_INTERNAL},
   {"u256Sub", 2, RULE_U256_2, OP_U256_SUB, OP_U256, 0, VIS_INTERNAL},
+  {"u256Mul", 2, RULE_U256_2, OP_U256_MUL, OP_U256, 0, VIS_INTERNAL},
+  {"u256Div", 2, RULE_U256_2, OP_U256_DIV, OP_U256, 0, VIS_INTERNAL},
   {"u256Le", 2, RULE_U256_2, OP_U256_LE, OP_FLAG, 0, VIS_INTERNAL},
   {"u256Eq", 2, RULE_U256_2, OP_U256_EQ, OP_FLAG, 0, VIS_INTERNAL},
   {"toU256", 1, RULE_TO_U256, OP_TO_U256, OP_U256, 0, VIS_INTERNAL},
@@ -5014,6 +5016,25 @@ static int run_call(Machine *m, Run *r, uint32_t line, char *const *word, uint32
   return 0;
 }
 
+/* The first script line `init WORD` of a run with init : U256 -> State
+   (Q-S10-5): the start state is init WORD. Returns 0, or 1 after a
+   diagnostic. */
+static int run_init(Machine *m, Run *r, uint32_t line, char *const *word, uint32_t count) {
+  const Value *x;
+  if (count != 2u || strcmp(word[0], "init") != 0)
+    return diag_fail(m->diag, "RUN_INIT", "init", "%s:%u: init reads one U256; the first line is init WORD", r->path, line) + 1;
+  x = entry_arg(m, word[1], ARG_TYPE_U256);
+  if (x == NULL)
+    return 1;
+  m->fuel = EVAL_FUEL_STEPS;
+  r->state = apply_value(m, r->state, x);
+  if (r->state == NULL)
+    return 1;
+  if (has_trap(r->state))
+    return diag_fail(m->diag, "RUN_INIT", "init", "the start state traps") + 1;
+  return 0;
+}
+
 /* Splits LINE at spaces and tabs. Returns the word count; keeps CAP words. */
 static uint32_t split_words(char *line, char **word, uint32_t cap) {
   uint32_t count = 0;
@@ -5035,6 +5056,11 @@ static uint32_t split_words(char *line, char **word, uint32_t cap) {
 int run_command(Machine *m, const char *path, const char *text, size_t len, FILE *out) {
   char *word[ENTRY_PARAMS_MAX + 3u];
   uint32_t init = find_def(m, "init");
+  const Value *itype = init == NO_DEF ? NULL : m->defs[init].type;
+  /* init : U256 -> State: the first script line `init WORD` gives the side
+     value (Q-S10-5). */
+  int init_arg = itype != NULL && itype->kind == VAL_PI && val_is(itype->dom, OP_U256);
+  int need_init = init_arg;
   uint32_t line = 0;
   size_t pos = 0;
   int status = 0;
@@ -5045,8 +5071,10 @@ int run_command(Machine *m, const char *path, const char *text, size_t len, FILE
   r.out = find_family(m, "Out");
   r.buf = arena_alloc(m->arena, PRINT_MAX);
   m->def = "init";
-  if (!m->has_state || init == NO_DEF || !is_family(m->defs[init].type, m->state_family) || r.env == NO_FAMILY)
-    return diag_fail(m->diag, "RUN_INIT", NULL, "a run needs a state and def init : State") + 1;
+  if (init_arg)
+    itype = closure_apply(m, itype, val_var(m, 0));
+  if (!m->has_state || init == NO_DEF || !is_family(itype, m->state_family) || r.env == NO_FAMILY)
+    return diag_fail(m->diag, "RUN_INIT", NULL, "a run needs a state and def init : State (or init : U256 -> State)") + 1;
   if (r.buf == NULL)
     return diag_fail(m->diag, "OOM", NULL, "out of memory") + 1;
   m->fuel = EVAL_FUEL_STEPS;
@@ -5070,12 +5098,16 @@ int run_command(Machine *m, const char *path, const char *text, size_t len, FILE
     copy[end - pos] = '\0';
     line++;
     count = split_words(copy, word, ENTRY_PARAMS_MAX + 3u);
-    if (count != 0u && strncmp(word[0], "--", 2) != 0)
-      status = run_call(m, &r, line, word, count, out);
+    if (count != 0u && strncmp(word[0], "--", 2) != 0) {
+      status = need_init ? run_init(m, &r, line, word, count) : run_call(m, &r, line, word, count, out);
+      need_init = 0;
+    }
     pos = end + 1u;
   }
   if (status != 0)
     return status;
+  if (need_init)
+    return diag_fail(m->diag, "RUN_INIT", "init", "%s: the script has no first line init WORD", r.path) + 1;
   m->def = NULL;
   if (!print_value(m, r.state, r.buf))
     return 1;

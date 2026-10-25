@@ -45,6 +45,19 @@ def divFloor : U256 -> U256 -> U256 := fun (n d : U256) =>
 def divCeil : U256 -> U256 -> U256 := fun (n d : U256) =>
   u256Add (divFloor n d) (flagIf (u256Eq (mul (divFloor n d) d) n) 0u 1u)
 
+-- Closed rows for `langc eval` (S10 s2, Q-S10-9 (a)): the kit primitives u256Mul and u256Div give the same words
+-- (the rows uMul0 to uDivTrap of examples/precompile.lang).
+def fMul0 : U256 := mul 0u 9u
+def fMul1 : U256 := mul 1u 9u
+def fMul15 : U256 := mul 3u 5u
+def fMulSq : U256 := mul 0xffffffffffffffffffffffffffffffffu 0xffffffffffffffffffffffffffffffffu
+-- The trap rows are entries (a Nat in, a Nat out), so `langc eval` gives EVAL_OVERFLOW. flagIf forces the word.
+def fMulTrap : (k : Nat) -> Nat := fun (k : Nat) => flagIf (u256Eq (mul 0x8000000000000000000000000000000000000000000000000000000000000000u (toU256 k)) 0u) 0 1
+def fDiv0 : U256 := divFloor 0u 5u
+def fDiv3 : U256 := divFloor 7u 2u
+def fDivSq : U256 := divFloor 0xfffffffffffffffffffffffffffffffe00000000000000000000000000000001u 0xffffffffffffffffffffffffffffffffu
+def fDivTrap : (k : Nat) -> Nat := fun (k : Nat) => flagIf (u256Eq (divFloor 7u (toU256 k)) 0u) 0 1
+
 -- The overflow bound (O7): capped r is r when r is below 2^128. Else it traps.
 def capped : U256 -> U256 := fun (r : U256) => flagIf (u256Le r bound) r (u256Add wMax r)
 

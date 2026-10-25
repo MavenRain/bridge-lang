@@ -7,11 +7,13 @@ runs=0
 tmp=${TMPDIR:-/tmp}/langc-run.$$
 mkdir -p "$tmp"
 
-# For each test/run/NAME.script, `langc run examples/NAME.lang` (examples/contract.lang
-# when there is no examples/NAME.lang) must exit 0 and print test/run/NAME.out
-# byte for byte.
+# For each test/run/NAME.script and test/run/NAME-TAG.script, `langc run
+# examples/NAME.lang` (examples/contract.lang when there is no examples/NAME.lang)
+# must exit 0 and print the .out file of the script byte for byte. A TAG gives
+# one program more scripts (twin-home and twin-remote: the two sides of twin.lang).
 for script in test/run/*.script; do
-  prog=examples/$(basename "${script%.script}").lang
+  name=$(basename "${script%.script}")
+  prog=examples/${name%%-*}.lang
   [ -f "$prog" ] || prog=examples/contract.lang
   status=0
   build/langc --kit run "$prog" "$script" >"$tmp/out" 2>"$tmp/err" || status=$?

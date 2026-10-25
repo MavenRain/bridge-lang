@@ -761,3 +761,124 @@ host counts do not change: runs 5, differential 14 host runs, run
 refusals 10, asmtool 8 checks, builds 3, lower refusals 16, build
 checks 33, dispatch 20 checks, evm steps 43, differential 14 EVM rows,
 mock 13 rows, diff 15 rows.
+
+## S10 s2
+
+Slice S10 s2 (the twin contract, PLAN 7, Q-S10-2 (a), Q-S10-3 (a),
+Q-S10-5 (a), Q-S10-6 (a), Q-S10-7 (a), Q-S10-9 (a), Q-S10-11 (c),
+Q-S10-12 (a) and Q-S10-14 (a)) is complete. The change is not committed; its base is
+the USER commit 460fda6 on 76af1b9 (tree ec8644a, the staged S10 s1
+tree). The gate `make check` is GREEN, exit 0. There is a src change:
+the side value and the kit primitives `u256Mul` and `u256Div`.
+
+DEVIATIONS for the USER:
+
+- The claim has no ring signature on the EVM (Q-S10-11 (c),
+  temporary). The key image comes from the claim arguments, and `claim`
+  marks each key image once. Thus a second key image is a second claim:
+  `test/run/twin-remote.script` shows it. The claim ring signature
+  stays in the kit eval (`examples/bridge.lang`). A later slice gives
+  one shared bLSAG routine for `cast` and `claim`.
+- The open ring fix of Q-S10-10 (a) moves to that slice (Q-S10-12 (a)).
+  That slice rules the source of H_i: a closed key table or a zkHp
+  lowering (O75).
+
+Changes (O75):
+
+- `src/asm.h`: EVM_OP_CODESIZE (0x38).
+- `src/evm.c` and `src/evm.h`: when `init` has an argument, the
+  creation code copies the 32-byte word after the code (offset CODESIZE
+  minus 32) and stores it in field 0 (the side value, Q-S10-5 (a)).
+- `src/lower.c`: an `init` with one U256 argument lowers; the
+  BINARY_OPS rows of `u256Mul` (IR_OP_MUL_TRAP) and `u256Div`
+  (IR_OP_DIV).
+- `src/front/check.c`: `langc --kit run` takes `init WORD` as the first
+  script line; the kit rows `u256Mul` and `u256Div`.
+- `src/front/core.h` and `src/front/eval.c`: OP_U256_MUL and
+  OP_U256_DIV (at the end of the Op enum) and their eval arms (each
+  trap gives EVAL_OVERFLOW).
+- `test/buildtool.c`: the 5 `evm_build` calls give NULL (the same
+  bytes).
+- `test/evmchain.sh`: `deploy PROG [WORD]` appends the side word.
+- `examples/side.lang` (new, kit, a row of `examples/kit.txt`),
+  `test/run/side.script` and `test/run/side.out` (new), and the EVM side
+  rows of `test/precompile.sh`.
+- `test/lower/init-two-args.lang` (new, REFUSE_LOWER, a row of
+  `test/lower/expect.txt`) and the comment of
+  `test/lower/init-args.lang`.
+- `examples/precompile.lang` and `examples/enact.lang`: the `u256Mul`
+  and `u256Div` rows. `test/eval/expect.txt`: 18 rows.
+  `test/precompile.sh`: 6 `mulv` and `divv` steps.
+  `docs/host/README.md`: 2 rows.
+- `examples/twin.lang` (new, kit, a row of `examples/kit.txt`): the
+  twin contract. One bytecode, two deployments (side 0 home, side 1
+  remote).
+- `test/run/twin-home.script`, `test/run/twin-home.out`,
+  `test/run/twin-remote.script` and `test/run/twin-remote.out` (new).
+  `test/run.sh` runs `examples/NAME.lang` for a script
+  `NAME-TAG.script`.
+- `test/gate.sh`: the twin size row (`sized`, the shared tail of
+  `ring_built`).
+- `test/check/pruned-op.lang`: the R19 row names `natMul`, not
+  `u256Mul` (a kit primitive since Q-S10-9 (a); Q-S10-14 (a)).
+
+Traps found in S10 s2:
+
+- P1: a deploy of a program with an `init` argument but without the
+  appended word originally stored the last 32 bytes of the runtime in
+  slot 0. The review fix requires exactly 32 appended bytes and reverts
+  for missing, partial or extra constructor data.
+- P2: the build drops an entry with more than 32 words
+  (ENTRY_PARAMS_MAX) with no diagnostic, and exits 0 (Q-S10-8). An
+  entry takes at most 30 words (the 255-byte ABI string,
+  EVM_SIGNATURE).
+- The guest run does not see the appended word: the run script gives
+  it on the `init` line. Thus only the EVM rows test the side word of
+  the build (M-s1, M-s2, O75).
+- `langc eval` takes arguments only for an entry. A closed def that
+  traps prints `trap` with exit 0 and an empty stderr. Thus the eval
+  rows `=> trap` are entries (O75).
+- The eval rows and the EVM rows of `u256Mul` and `u256Div` each kill
+  only the mutants of their side (M-s3 to M-s6, O75).
+- A gate of one part after a src change does not see the check rows:
+  run the full gate. Resumes 7 to 10 ran only the precompile, eval and
+  run gates after the `u256Mul` change, thus only the final gate found
+  the R19 row `pruned-op.lang` (Q-S10-14).
+
+The attest words of the runs (key 7, Q-S10-4 (a); the words print in
+decimal):
+
+- `wordA = hash (hash 1u 100u) 100u` (the Decision word of `addLiq 100
+  100`) is
+  69914689039486352338164481898370239755594127164942748291139874641240398830175u.
+- `batchB` (the hash chain starting at `batchSeed 0u`, of the 3 deposits
+  (5, 6, 10), (7, 8, 10) and (9, 10, 10)) is
+  65464856881474182367233619130168970009212943138116352224957205723450756253912u.
+- Attest A signs `attestMsg 0u 1u wordA` (the remote `enact` of n = 1)
+  with the nonce k = 23. Attest B signs `attestMsg 0u 0u batchB` (the
+  `accept` of batch 0) with k = 29. For each, s = (k + 7 e) mod r.
+  `attestMsg 1u 0u batchB` does not verify.
+
+| Count | S10 s1 | S10 s2 | Reason |
+|---|---|---|---|
+| examples | 57 | 59 | `side.lang`, `twin.lang` |
+| parse refusals | 19 | 19 | no new parse row |
+| check refusals | 193 | 193 | no new check row |
+| pool refusals | 4 | 4 | no new pool row |
+| bridge refusals | 6 | 6 | no new bridge row |
+| kit-only refusals | 22 | 22 | no new `REFUSE_KIT` row |
+| evals | 335 | 353 | 9 `precompile` rows, 9 `enact` rows (Q-S10-9 (a)) |
+| proves | 2 | 2 | no new prove row |
+| contracts | 2 written, 5 refused | 2 written, 5 refused | no contract change |
+| rings | 6 built, 2 refused | 7 built, 2 refused | the `twin.lang` size row |
+| differential | 28 guest evals | 28 guest evals | no new differential row |
+
+The host counts change in 4 places: runs 5 to 8 (`side.script`,
+`twin-home.script`, `twin-remote.script`), lower refusals 16 to 17
+(`init-two-args.lang`), build checks 33 to 34 (the same row), and
+precompile 135 to 146 steps (the side slot 0 and `sideOf` steps, 6
+`mulv` and `divv` steps, 3 malformed constructor refusals). The review
+adds 13 twin DSL regression rows. The other host counts do not change:
+differential 14 host runs, run refusals 10, asmtool 8 checks, builds 3,
+dispatch 20 checks, evm steps 43, differential 14 EVM rows, mock 13
+rows, diff 15 rows.

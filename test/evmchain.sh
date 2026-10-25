@@ -129,12 +129,14 @@ genesis() {
     "$config" "$1" "$2" >"$tmp/pre.json"
 }
 
-# deploy PROG: run the creation code of PROG. tmp/code gets the code of the
-# new account, tmp/raw and tmp/got its storage.
+# deploy PROG [WORD]: run the creation code of PROG, with the 32-byte hex
+# WORD (64 hex digits, no 0x) appended when it is given: the side value of
+# init : U256 -> State (Q-S10-5). tmp/code gets the code of the new account,
+# tmp/raw and tmp/got its storage.
 deploy() {
   genesis 0 ''
   _hex=$(build/langc --kit build "$1") || return 1
-  evm run --prestate "$tmp/pre.json" --create --code "$_hex" --dump >"$tmp/dump" 2>&1 || return 1
+  evm run --prestate "$tmp/pre.json" --create --code "$_hex${2:-}" --dump >"$tmp/dump" 2>&1 || return 1
   awk '$1 == "\"code\":" { v = $2; gsub(/[",]/, "", v); print tolower(substr(v, 3)); exit }' "$tmp/dump" >"$tmp/code"
   [ -s "$tmp/code" ] || return 1
   slots "$tmp/dump"

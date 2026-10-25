@@ -93,7 +93,7 @@ int asm_finish(Asm *a, FILE *err) {
   return 1;
 }
 
-int asm_creation_store(Asm *a, const Asm *store, const Asm *runtime, FILE *err) {
+int asm_creation_store(Asm *a, const Asm *store, const Asm *runtime, size_t arg_bytes, FILE *err) {
   if (runtime->size > ASM_RUNTIME_MAX) {
     fprintf(err, "langc: EVM_SIZE: -: the runtime has %zu bytes, the limit is %d\n", runtime->size, ASM_RUNTIME_MAX);
     return 0;
@@ -101,8 +101,18 @@ int asm_creation_store(Asm *a, const Asm *store, const Asm *runtime, FILE *err) 
   asm_init(a);
   Label revert = asm_label(a);
   Label body = asm_label(a);
+  Label end = asm_label(a);
   asm_op(a, EVM_OP_CALLVALUE);
   asm_jump_if(a, revert);
+  if (arg_bytes != 0) {
+    asm_op(a, EVM_OP_CODESIZE);
+    asm_push_label(a, end);
+    asm_push(a, arg_bytes);
+    asm_op(a, EVM_OP_ADD);
+    asm_op(a, EVM_OP_EQ);
+    asm_op(a, EVM_OP_ISZERO);
+    asm_jump_if(a, revert);
+  }
   for (size_t i = 0; store != NULL && i < store->size; i++) asm_put(a, store->code[i]);
   asm_push(a, runtime->size);
   asm_op(a, EVM_OP_DUP1);
@@ -117,11 +127,13 @@ int asm_creation_store(Asm *a, const Asm *store, const Asm *runtime, FILE *err) 
   asm_op(a, EVM_OP_REVERT);
   asm_bind(a, body);
   for (size_t i = 0; i < runtime->size; i++) asm_put(a, runtime->code[i]);
+  asm_bind(a, end);
+  if (arg_bytes > ASM_CAPACITY || a->size > ASM_CAPACITY - arg_bytes) a->full = 1;
   return asm_finish(a, err);
 }
 
 int asm_creation(Asm *a, const Asm *runtime, FILE *err) {
-  return asm_creation_store(a, NULL, runtime, err);
+  return asm_creation_store(a, NULL, runtime, 0, err);
 }
 
 int asm_write_hex(const Asm *a, FILE *out, FILE *err) {
