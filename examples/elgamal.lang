@@ -78,18 +78,24 @@ def forgedResponse : U256 := 0x1b670e93ec86edf19116c2d0a710466e7f9d4e03b333152e6
 def dleqForged : Flag := dleqOk x1Pub forgedBase g (pair (pair dleqA g) forgedResponse)
 def dleqForgedRelation : Flag := ptEq (ecMul forgedBase 12u) g
 
--- The attest is one Schnorr signature (R, s) over msg = keccak(keccak(side, batch number), batch).
+-- The attest is one Schnorr signature (R, s) over msg = keccak(keccak(keccak(acceptTag, side), batch number), batch).
 -- The check is s G = R + e pk with e = keccak(keccak(H(R), H(pk)), msg).
-def attestMsg : U256 -> U256 -> U256 -> U256 := fun (side : U256) (n : U256) (d : U256) => hash (hash side n) d
+-- The attest tags (Q-S10-13 (a)): ASCII enact and ASCII accept. The tag is the first word of the
+-- message, so a message of one use is not a message of the other use (a match needs a keccak collision).
+def enactTag : U256 := 0x656e616374u
+def acceptTag : U256 := 0x616363657074u
+def attestMsg : U256 -> U256 -> U256 -> U256 -> U256 := fun (dom : U256) (side : U256) (n : U256) (d : U256) => hash (hash (hash dom side) n) d
 def schnorrOk : Point -> U256 -> Prod Point U256 -> Flag := fun (y : Point) (msg : U256) (sig : Prod Point U256) =>
   ptEq (ecMul g (second sig)) (ecAdd (first sig) (ecMul y (hash (hash (hashPt (first sig)) (hashPt y)) msg)))
-def msg1 : U256 := attestMsg 0u 1u 42u
+def msg1 : U256 := attestMsg acceptTag 0u 1u 42u
 -- The nonce is 23 and the key is 7, so s = 23 + 7 e mod r (an off-chain literal).
-def sSig : U256 := 0x2cf177fe294ed6d9e6828d92c2d042f90179cff96a4f8a14eb65eaa7f96d55deu
+def sSig : U256 := 0x2c254087c58dacac565702fa12e3acecadff90b43dbe5b5f7d9a6c67b9f07e7eu
 def sig1 : Prod Point U256 := pair (ecMul g 23u) sSig
 def attestOk : Flag := schnorrOk pk msg1 sig1
 def attestBadS : Flag := schnorrOk pk msg1 (pair (ecMul g 23u) (u256Add sSig 1u))
-def attestOther : Flag := schnorrOk pk (attestMsg 1u 1u 42u) sig1
+def attestOther : Flag := schnorrOk pk (attestMsg acceptTag 1u 1u 42u) sig1
+-- The tag enactTag gives another message, so sig1 does not verify for it (Q-S10-13 (a)).
+def attestCrossTag : Flag := schnorrOk pk (attestMsg enactTag 0u 1u 42u) sig1
 def attestLaw : Path Flag (schnorrOk pk msg1 sig1) flagYes := refl
 
 -- A cipher with (1, 1) as C1 is off the curve: the decrypt traps (as mulBad in bn254.lang).

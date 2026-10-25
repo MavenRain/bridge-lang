@@ -12,9 +12,12 @@
 # 0 (C-K4d-8), test/run/basic.script on examples/contract.lang. Each step
 # must give the result of `langc run`. At the end, the contract storage must
 # equal the state of `langc run` and the mock balances must equal the sums of
-# the pay and pull rows of `langc run`, mod 2^256 (bc, C-K4d-9). It needs evm
-# (go-ethereum), bc, od, build/langc, build/asmtool and build/slottool. Run it
-# from the kit root.
+# the pay and pull rows of `langc run`, mod 2^256 (bc, C-K4d-9). Part 3 (S10
+# s3, D4) runs examples/twin.lang twice in one chain state: side 0 at the
+# receiver and side 1 at the address remote (test/run/twin-d4-*.script), and
+# the gas of each step must be at most the bound of its entry in
+# test/run/twin-d4.gas. It needs evm (go-ethereum), bc, od, build/langc, build/asmtool and
+# build/slottool. Run it from the kit root.
 set -u
 fail=0
 rows=0
@@ -117,15 +120,16 @@ row pay-empty 2 "$tmp/s1" "$moved" "$wd" ok "$paid" "$(lg $receiver aa 1e)"
 row pay-revert 3 "$tmp/s1" "$moved" "$wd" revert "$moved" ""
 row pay-no-code none "$tmp/s1" "" "$wd" revert "" ""
 
-# sums: the mock storage rows (norm, no zero rows) of the pay and pull rows of
-# tmp/run: `pull TOKEN FROM TO AMOUNT` moves AMOUNT from FROM to TO and `pay
-# TOKEN TO AMOUNT` moves AMOUNT from the contract to TO, mod 2^256 (bc).
+# sums [RUN]: the mock storage rows (norm, no zero rows) of the pay and pull
+# rows of the file RUN (default tmp/run): `pull TOKEN FROM TO AMOUNT` moves
+# AMOUNT from FROM to TO and `pay TOKEN TO AMOUNT` moves AMOUNT from the
+# contract to TO, mod 2^256 (bc).
 sums() {
   awk -v c="$receiver" '
     function mv(f, t, n) { sub(/u$/, "", n); s[f] = s[f] "-" n; s[t] = s[t] "+" n }
     $1 == "pull" { mv(substr(tolower($3), 3), substr(tolower($4), 3), $5) }
     $1 == "pay" { mv(c, substr(tolower($3), 3), $4) }
-    END { for (a in s) print a, s[a] }' "$tmp/run" |
+    END { for (a in s) print a, s[a] }' "${1:-$tmp/run}" |
     while read -r _a _e; do
       echo "$(pad "$_a") $(echo "obase=16; m = 2^256; ((0$_e) % m + m) % m" | bc)"
     done | norm | awk '$2 != "0"'
@@ -195,6 +199,121 @@ script examples/map.lang test/run/map.script
 script examples/residuals.lang test/run/residuals.script
 script examples/events.lang test/run/events.script
 script examples/lists.lang test/run/lists.script
+
+# Part 3 (S10 s3, D4): the differential of two deployments. One chain state
+# holds examples/twin.lang twice, side 0 (home) at the receiver and side 1
+# (remote) at the address remote, and the mock in mode 0 at the token. The
+# prestate of each step holds the side that is called (tmp/code, tmp/raw)
+# and, in alloc, the other side and the mock. Each step must give the result
+# of `langc run`. At the end, the storage of each side must equal its state
+# of `langc run`, the mock balances must equal the sums of the pull and pay
+# rows of both runs (a remote pay is from the remote address), and the rxOf
+# and ryOf rows of each side must equal homeAdd of examples/enact.lang.
+remote=$(printf '%40s' 72656d6f7465 | tr ' ' 0)
+twin=examples/twin.lang
+
+# acode ADDR CODE RAW: the alloc entry of the account ADDR with the code in
+# the file CODE and the storage rows of the file RAW.
+acode() {
+  printf ',"0x%s":{"balance":"0x0","code":"0x%s","storage":{%s}}' "$1" "$(cat "$2")" "$(
+    awk '{ printf "%s\"0x%s\":\"0x%s\"", (NR > 1 ? "," : ""), $1, $2 }' "$3")"
+}
+
+# side S: the address of the side S (h home, r remote).
+side() { case $1 in h) echo "$receiver" ;; r) echo "$remote" ;; esac; }
+
+# d4 SCRIPT S O: the steps of SCRIPT on the side S (h or r), with the side O
+# and the mock in alloc. tmp/S.code and tmp/S.raw hold the code and the
+# storage of S, tmp/S.run the output of `langc run`. At the end, the storage
+# of S must equal the state of that run. The init line is not a step (deploy
+# gives the side word).
+d4() {
+  _script=$1 _s=$2 _o=$3
+  _self=$(side "$_s") _other=$(side "$_o")
+  rows=$((rows + 1))
+  awk 'NF && $1 != "--"' "$_script" >"$tmp/calls"
+  if ! build/langc --kit run "$twin" "$tmp/calls" >"$tmp/$_s.run" 2>"$tmp/err"; then
+    echo "FAIL diff $_script: langc run: $(head -n 1 "$tmp/err")"
+    fail=$((fail + 1))
+    return
+  fi
+  to=$_self
+  awk '$1 != "init"' "$tmp/calls" >"$tmp/steps"
+  _calls=$(awk 'END { print NR }' "$tmp/steps")
+  _k=0
+  while [ "$_k" -lt "$_calls" ]; do
+    _k=$((_k + 1))
+    set -- $(awk -v k="$_k" 'NR == k' "$tmp/steps")
+    _now=$1 _caller=$2 _name=$3
+    shift 3
+    cp "$tmp/$_s.code" "$tmp/code"
+    cp "$tmp/$_s.raw" "$tmp/raw"
+    alloc="$(acode "$_other" "$tmp/$_o.code" "$tmp/$_o.raw")$(acode "$token" "$tmp/mock" "$tmp/m")"
+    _input=$(input "$twin" "$_name" "$@")
+    if ! step "$_now" "$_caller" "$_input"; then
+      echo "FAIL diff $_script:$_k $_name: evm: $(head -n 1 "$tmp/dump")"
+      fail=$((fail + 1))
+      to=
+      return
+    fi
+    _want=$(awk -v k="$_k" '$1 == k { print $3 }' "$tmp/$_s.run")
+    [ "$_want" = = ] && _want="out $(word "$(awk -v k="$_k" '$1 == k { print $4 }' "$tmp/$_s.run")")"
+    case $result in
+      "out "*) _hex=${result#out }
+        [ ${#_hex} -eq 64 ] && result="out $(hexnorm "$_hex")" ;;
+    esac
+    [ "$result" = "$_want" ] || { echo "FAIL diff $_script:$_k $_name: want $_want, got $result"; fail=$((fail + 1)); }
+    acct "$_self" >"$tmp/$_s.raw"
+    acct "$_other" >"$tmp/$_o.raw"
+    acct "$token" >"$tmp/m"
+    echo "$_name $(gas "$_caller" "$_input")" >>"$tmp/gas"
+  done
+  to=
+  norm <"$tmp/$_s.raw" >"$tmp/c"
+  want "$(awk '$1 == "state" { sub(/^state /, ""); print }' "$tmp/$_s.run")"
+  cmp -s "$tmp/want" "$tmp/c" || {
+    echo "FAIL diff $_script: side $_s storage: want $(tr '\n' ' ' <"$tmp/want"), got $(tr '\n' ' ' <"$tmp/c")"
+    fail=$((fail + 1))
+  }
+}
+
+: >"$tmp/m"
+: >"$tmp/gas"
+if deploy "$twin" "$(pad 0)" && cp "$tmp/code" "$tmp/h.code" && cp "$tmp/raw" "$tmp/h.raw" &&
+  deploy "$twin" "$(pad 1)" && cp "$tmp/code" "$tmp/r.code" && cp "$tmp/raw" "$tmp/r.raw"; then
+  d4 test/run/twin-d4-home.script h r
+  d4 test/run/twin-d4-remote.script r h
+  rows=$((rows + 1))
+  { cat "$tmp/h.run"; awk -v r="0x$remote" '$1 == "pay" { print "pull", $2, r, $3, $4; next } { print }' "$tmp/r.run"; } >"$tmp/both"
+  sums "$tmp/both" >"$tmp/twant"
+  norm <"$tmp/m" >"$tmp/tgot"
+  cmp -s "$tmp/twant" "$tmp/tgot" || {
+    echo "FAIL diff $twin: mock balances: want $(tr '\n' ' ' <"$tmp/twant"), got $(tr '\n' ' ' <"$tmp/tgot")"
+    fail=$((fail + 1))
+  }
+  set -- $(build/langc --kit eval examples/enact.lang homeAdd)
+  for _s in h r; do
+    rows=$((rows + 1))
+    _got=$(awk '$2 == "rxOf" || $2 == "ryOf" { printf " %s", $4 }' "$tmp/$_s.run")
+    [ "pair$_got" = "$*" ] || { echo "FAIL diff $twin: side $_s rxOf ryOf: want $*, got pair$_got"; fail=$((fail + 1)); }
+  done
+  # The gas rows: one row for each entry of test/run/twin-d4.gas. The gas of
+  # each step of both scripts must be at most the bound of its entry, and each
+  # entry must have a step.
+  awk 'NF && $1 != "--"' test/run/twin-d4.gas >"$tmp/bound"
+  rows=$((rows + $(awk 'END { print NR }' "$tmp/bound")))
+  awk -v t="$twin" '
+    FILENAME == ARGV[1] { b[$1] = $2; next }
+    { s[$1] = 1 }
+    !($1 in b) { print "FAIL diff " t ": gas " $1 ": " $2 ", no bound"; next }
+    $2 == "" || $2 + 0 > b[$1] + 0 { print "FAIL diff " t ": gas " $1 ": " $2 " over the bound " b[$1] }
+    END { for (n in b) if (!(n in s)) print "FAIL diff " t ": gas " n ": no step" }' "$tmp/bound" "$tmp/gas" >"$tmp/gasfail"
+  cat "$tmp/gasfail"
+  fail=$((fail + $(awk 'END { print NR }' "$tmp/gasfail")))
+else
+  echo "FAIL diff $twin: deploy: $(head -n 1 "$tmp/dump")"
+  fail=$((fail + 1))
+fi
 
 rm -rf "$tmp"
 echo "diff gate: $rows rows, $fail failures"

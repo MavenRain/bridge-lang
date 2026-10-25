@@ -15,3 +15,4 @@ loop-word.lang REFUSE_LOWER
 orbit-word.lang REFUSE_LOWER
 glue-word.lang REFUSE_LOWER
 init-two-args.lang REFUSE_LOWER
+arity33.lang EVM_ARITY

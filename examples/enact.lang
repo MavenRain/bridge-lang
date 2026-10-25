@@ -124,7 +124,7 @@ def k0 : U256 := 1000000u
 def p0 : Pool k0 := mkPool k0 1000u 1000u refl refl refl
 def d100 : Positive := pack 100u refl
 
--- The attest is one Schnorr signature (R, s) over msg = keccak(keccak(side, proposal number), word).
+-- The attest is one Schnorr signature (R, s) over msg = keccak(keccak(keccak(enactTag, side), proposal number), word).
 -- The check is s G = R + e pk with e = keccak(keccak(H(R), H(pk)), msg).
 def g : Prod U256 U256 := pair 1u 2u
 def Point : Type 0 := Prod U256 U256
@@ -132,7 +132,11 @@ def ptEq : Point -> Point -> Flag := fun (a : Point) (b : Point) =>
   flagIf (u256Eq (first a) (first b)) (u256Eq (second a) (second b)) flagNo
 def hashPt : Point -> U256 := fun (q : Point) => hash (first q) (second q)
 def pk : Point := ecMul g 7u
-def attestMsg : U256 -> U256 -> U256 -> U256 := fun (side : U256) (n : U256) (d : U256) => hash (hash side n) d
+-- The attest tags (Q-S10-13 (a)): ASCII enact and ASCII accept. The tag is the first word of the
+-- message, so a message of one use is not a message of the other use (a match needs a keccak collision).
+def enactTag : U256 := 0x656e616374u
+def acceptTag : U256 := 0x616363657074u
+def attestMsg : U256 -> U256 -> U256 -> U256 -> U256 := fun (dom : U256) (side : U256) (n : U256) (d : U256) => hash (hash (hash dom side) n) d
 def schnorrOk : Point -> U256 -> Prod Point U256 -> Flag := fun (y : Point) (msg : U256) (sig : Prod Point U256) =>
   ptEq (ecMul g (second sig)) (ecAdd (first sig) (ecMul y (hash (hash (hashPt (first sig)) (hashPt y)) msg)))
 
@@ -177,7 +181,7 @@ def EnactState : Type 0 := Prod (Prod U256 U256) (List U256)
 def enactRemote : U256 -> DecisionW -> Prod Point U256 -> EnactState -> EnactState :=
   fun (n : U256) (d : DecisionW) (sig : Prod Point U256) (st : EnactState) =>
     flagIf (freshProposal n (second st))
-      (flagIf (schnorrOk pk (attestMsg 0u n (decisionWord d)) sig)
+      (flagIf (schnorrOk pk (attestMsg enactTag 0u n (decisionWord d)) sig)
         (flagIf (decisionOk d (first st))
           (flagIf (u256Le 1u (first (enactW d (first st))))
             (pair (enactW d (first st)) (cons n (second st))) st) st) st) st
@@ -188,13 +192,13 @@ def r0 : Prod U256 U256 := pair 1000u 1000u
 def addD : DecisionW := addW 100u 100u
 def removeD : DecisionW := removeW 100u 100u
 -- The nonces are 23 and 29 and the key is 7, so s = k + 7 e mod r (off-chain literals).
-def sAdd : U256 := 0x2759611834b4be056e205b2eceaf0ca378dae9f3d2ce018e3b8fb78d5d92ab48u
-def sRemove : U256 := 0x104a9dc8b94189a2419ebe6c77ddcd5b08f10a66f213d894eb335cf103490791u
+def sAdd : U256 := 0x16c7db2f9518158af598a29100524e94c3f6f0040de3e355d901cfa8d41af243u
+def sRemove : U256 := 0x19216fc3a115aa4ef29669ad890882cab0deb9c59c99f95eb00bd7fbc23ea121u
 def sigAdd : Prod Point U256 := pair (ecMul g 23u) sAdd
 def sigRemove : Prod Point U256 := pair (ecMul g 29u) sRemove
 -- Attested n d sig is the typed attest. addLiqRemote is addLiq with the attest of the Decision as an argument.
 def Attested : U256 -> DecisionW -> Prod Point U256 -> Type 0 := fun (n : U256) (d : DecisionW) (sig : Prod Point U256) =>
-  Path Flag (schnorrOk pk (attestMsg 0u n (decisionWord d)) sig) flagYes
+  Path Flag (schnorrOk pk (attestMsg enactTag 0u n (decisionWord d)) sig) flagYes
 def RemotePool : U256 -> Type 0 := fun (k : U256) => Prod (Pool k) (List U256)
 def addLiqRemote : (k : U256) -> (st : RemotePool k) -> (n : U256) -> (dx dy : Positive) -> (sig : Prod Point U256) -> Attested n (addW (witness dx) (witness dy)) sig -> Path Flag (freshProposal n (second st)) flagYes -> PriceEq (resX k (first st)) (resY k (first st)) (witness dx) (witness dy) -> PoolLaw k (addLiqW (resX k (first st)) (resY k (first st)) (witness dx) (witness dy)) -> RemotePool k :=
   fun (k : U256) (st : RemotePool k) (n : U256) (dx dy : Positive) (sig : Prod Point U256) (a : Attested n (addW (witness dx) (witness dy)) sig) (f : Path Flag (freshProposal n (second st)) flagYes) (h : PriceEq (resX k (first st)) (resY k (first st)) (witness dx) (witness dy)) (hp : PoolLaw k (addLiqW (resX k (first st)) (resY k (first st)) (witness dx) (witness dy))) =>
@@ -202,15 +206,17 @@ def addLiqRemote : (k : U256) -> (st : RemotePool k) -> (n : U256) -> (dx dy : P
 def pRemoteAddState : RemotePool k0 := addLiqRemote k0 (pair p0 nil) 1u d100 d100 sigAdd refl refl (pair refl refl) (pair refl (pair refl refl))
 def pRemoteAdd : Pool k0 := first pRemoteAddState
 -- The attest of addD holds, and the remote addLiq gives the reserves of the home enactW (closed values, refl).
-def lawAttest : Path Flag (schnorrOk pk (attestMsg 0u 1u (decisionWord addD)) sigAdd) flagYes := refl
+def lawAttest : Path Flag (schnorrOk pk (attestMsg enactTag 0u 1u (decisionWord addD)) sigAdd) flagYes := refl
 def lawRemoteAdd : Path (Prod U256 U256) (poolWords k0 pRemoteAdd) (enactW addD r0) := refl
 
 -- Entries for `langc eval`.
 def homeKeep : Prod U256 U256 := enactW keepW r0
 def homeAdd : Prod U256 U256 := enactW addD r0
 def homeRemove : Prod U256 U256 := enactW removeD r0
-def attestAdd : Flag := schnorrOk pk (attestMsg 0u 1u (decisionWord addD)) sigAdd
-def attestRemove : Flag := schnorrOk pk (attestMsg 0u 2u (decisionWord removeD)) sigRemove
+def attestAdd : Flag := schnorrOk pk (attestMsg enactTag 0u 1u (decisionWord addD)) sigAdd
+def attestRemove : Flag := schnorrOk pk (attestMsg enactTag 0u 2u (decisionWord removeD)) sigRemove
+-- The tag acceptTag gives another message, so sigAdd does not verify for it (Q-S10-13 (a)).
+def attestCross : Flag := schnorrOk pk (attestMsg acceptTag 0u 1u (decisionWord addD)) sigAdd
 def state0 : EnactState := pair r0 nil
 def remoteAddState : EnactState := enactRemote 1u addD sigAdd state0
 def remoteRemoveState : EnactState := enactRemote 2u removeD sigRemove state0

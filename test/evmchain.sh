@@ -147,11 +147,12 @@ deploy() {
 # trap (the Trap() selector), error, `revert HEX` or `out HEX`. tmp/raw and
 # tmp/got get the storage after the call. A set alloc (`,"0xADDR":{...}`)
 # adds accounts to the prestate (test/diff.sh: the mock token); then tmp/raw
-# holds the storage of all accounts.
+# holds the storage of all accounts. A set to (40 hex digits, test/diff.sh
+# part 3) is the address of the call in place of the receiver.
 step() {
   _st=$(awk '{ printf "%s\"0x%s\":\"0x%s\"", (NR > 1 ? "," : ""), $1, $2 }' "$tmp/raw")
-  genesis "$1" "\"0x$receiver\":{\"balance\":\"0x0\",\"code\":\"0x$(cat "$tmp/code")\",\"storage\":{$_st}}${alloc:-}"
-  evm run --prestate "$tmp/pre.json" --receiver "0x$receiver" --sender "$2" --input "$3" \
+  genesis "$1" "\"0x${to:-$receiver}\":{\"balance\":\"0x0\",\"code\":\"0x$(cat "$tmp/code")\",\"storage\":{$_st}}${alloc:-}"
+  evm run --prestate "$tmp/pre.json" --receiver "0x${to:-$receiver}" --sender "$2" --input "$3" \
     --dump >"$tmp/dump" 2>&1 || return 1
   result=$(awk '
     /^0x[0-9a-f]*$/ { o = $0 }
@@ -169,8 +170,9 @@ step() {
 
 # logs CALLER INPUT: the logs of the step on tmp/pre.json (the LOGS block of
 # `evm run --debug`), one line for each LOG: the topics and the data.
+# A set to is the address of the call, as in step.
 logs() {
-  evm run --debug --prestate "$tmp/pre.json" --receiver "0x$receiver" --sender "$1" --input "$2" \
+  evm run --debug --prestate "$tmp/pre.json" --receiver "0x${to:-$receiver}" --sender "$1" --input "$2" \
     >"$tmp/debug" 2>&1 </dev/null || return 1
   awk '
     /^#### LOGS ####/ { p = 1; next }
@@ -180,4 +182,13 @@ logs() {
     length($2) == 64 { t = t (t == "" ? "" : ",") $2; next }
     { for (i = 2; i <= NF && $i ~ /^[0-9a-f][0-9a-f]$/; i++) d = d $i }
     END { if (n) print t " " (d == "" ? "-" : d) }' "$tmp/debug" >"$tmp/gotlogs"
+}
+
+# gas CALLER INPUT: the gas of the step on tmp/pre.json (`EVM gas used` of
+# `evm run --statdump`, with no intrinsic gas). A set to is the address of the
+# call, as in step.
+gas() {
+  evm run --statdump --prestate "$tmp/pre.json" --receiver "0x${to:-$receiver}" --sender "$1" --input "$2" \
+    >"$tmp/stat" 2>&1 </dev/null || return 1
+  awk '$1 == "EVM" && $2 == "gas" && $3 == "used:" { print $4 }' "$tmp/stat"
 }

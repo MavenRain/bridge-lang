@@ -372,7 +372,7 @@ The ring size bounds the gas of `claim` (O17).
 | S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | s1 DONE (2026-10-23), the guest side (Q-S7-1 (a)): examples 46, parse refusals 19, check refusals 174, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 217, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the host and precompile rows wait for intent-lang S5 and S6 (O33); s2 DONE (2026-10-23), the port of intent-lang 1b65dec (the sealed `Enc`, the law-only `decrypt` and the host ElGamal) and the Q-S3-2 (a) item (O53 to O58, Q-S7-3 (a)): examples 50, parse refusals 19, check refusals 185, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 267, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the precompile rows wait for the port of intent-lang S6 9b99528 (O33) |
 | S8 | `ZKBridge` as the mapping cylinder; `ZKBridge ≃ BridgeState`; bLSAG claim rings and key images | DONE (2026-10-23), the guest side (Q-S8-1 (a) to Q-S8-4 (a)): examples 47, parse refusals 19, check refusals 175, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 237, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; no src change and no domain change (O38 to O43) |
 | S9 | Part D: encrypted ballots, `tallyEnc`, the tally law, liquidity Decisions, the remote enactment | DONE (2026-10-24), Part D is closed. s1 DONE (2026-10-23), the tally, the tally law and the liquidity Decisions (Q-S9-1 (a), Q-S9-2 (a)): examples 52, parse refusals 19, check refusals 188, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 277, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s1 has no src change and no domain change (O59 to O63). s2 DONE (2026-10-24), the remote enactment and the signed ballot in the kit examples `examples/enact.lang` and `examples/ballot.lang` (Q-S9-3 (a), Q-S9-4 (b)): examples 54, parse refusals 19, check refusals 191, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 314, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s2 has no src change and no domain change (O64 to O68) |
-| S10 | The contract of section 7: writer, two-deployment differential, gas and size rows | s1 DONE (2026-10-24), the port of the intent-lang S7 one-hot proof (ef5abe8, Q-S10-1 (a)) and the signed encrypted cast in the kit example `examples/cast.lang` (Q-S10-4 (a), Q-S10-7 (a)): examples 57, parse refusals 19, check refusals 193, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 335, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures, precompile 135 steps; s1 has a src change (`src/front/sigma.c`, `src/front/sigma.h`, the ZK walk skip of `src/front/check.c`) and a domain change (`ZKProof`, `Transcript`, `verified`) (O70 to O74); s2 DONE (2026-10-25), the twin contract `examples/twin.lang` (one bytecode, two deployments, the side value as the `init` argument, Q-S10-2 (a), Q-S10-3 (a), Q-S10-5 (a)) and the kit primitives `u256Mul` and `u256Div` (Q-S10-9 (a)): examples 59, evals 353, rings 7 built 2 refused, runs 8, lower refusals 17, build checks 34, precompile 143 steps, gate 0 failures; s2 has a src change (the `init` argument in `src/lower.c`, `src/evm.c`, `src/evm.h`, `src/asm.h` and `src/front/check.c`; `u256Mul` and `u256Div` in `src/front/core.h`, `src/front/check.c`, `src/front/eval.c` and `src/lower.c`) and a temporary DEVIATION from PLAN 7 (the claim has no ring signature on the EVM, Q-S10-11 (c)) (O75); s3 (the geth two-deployment differential, the gas rows, the contract mutants, the S10 close) is PLANNED |
+| S10 | The contract of section 7: writer, two-deployment differential, gas and size rows | s1 DONE (2026-10-24), the port of the intent-lang S7 one-hot proof (ef5abe8, Q-S10-1 (a)) and the signed encrypted cast in the kit example `examples/cast.lang` (Q-S10-4 (a), Q-S10-7 (a)): examples 57, parse refusals 19, check refusals 193, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 335, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures, precompile 135 steps; s1 has a src change (`src/front/sigma.c`, `src/front/sigma.h`, the ZK walk skip of `src/front/check.c`) and a domain change (`ZKProof`, `Transcript`, `verified`) (O70 to O74); s2 DONE (2026-10-25), the twin contract `examples/twin.lang` (one bytecode, two deployments, the side value as the `init` argument, Q-S10-2 (a), Q-S10-3 (a), Q-S10-5 (a)) and the kit primitives `u256Mul` and `u256Div` (Q-S10-9 (a)): examples 59, evals 353, rings 7 built 2 refused, runs 8, lower refusals 17, build checks 34, precompile 143 steps, gate 0 failures; s2 has a src change (the `init` argument in `src/lower.c`, `src/evm.c`, `src/evm.h`, `src/asm.h` and `src/front/check.c`; `u256Mul` and `u256Div` in `src/front/core.h`, `src/front/check.c`, `src/front/eval.c` and `src/lower.c`) and a temporary DEVIATION from PLAN 7 (the claim has no ring signature on the EVM, Q-S10-11 (c)) (O75); s3 DONE (2026-10-25), the geth two-deployment differential of `examples/twin.lang` (D4), the gas rows and the contract mutants (Q-S10-8 (a), Q-S10-13 (a), Q-S10-15 (a), Q-S10-16 (a)): evals 355, lower refusals 18, build checks 35, runs 10, diff gate 33 rows, gate 0 failures; s3 has a src change (the entry arity check in `residualize`, `src/lower.c`) (O77); s4 (the bLSAG slice: one shared unrolled routine for `cast` and `claim`, the open ring fix of Q-S10-10 (a), the H_i source of Q-S10-12 ((b) the closed key table or (c) zkHp, a ruling at the s4 start), the claim ring signature on the EVM; s4 stops and asks if it does not fit under EIP-170) is PLANNED; s5 (the S10 close) is PLANNED |
 | S11 | Mutants and close | PLANNED |
 
 ## 10. Open items
@@ -1123,6 +1123,71 @@ The ring size bounds the gas of `claim` (O17).
   bytes under EIP-170. O75 records the measurements before these
   fixes. Q-S10-11 (c), Q-S10-12 (a), Q-S10-8 and Q-S10-13 keep their
   recorded scope and status.
+- O77: S10 s3 (2026-10-25), the two-deployment differential, the gas
+  rows and the contract mutants. The base is the USER commit 5e4b34b
+  (tree f9e91e4, the staged S10 s2 tree). The main loop built s3 by
+  hand (USER ruling 10-05).
+  - The entry arity (Q-S10-8 (a)). `residualize` (`src/lower.c`)
+    counts the word arguments after ENTRY_PARAMS_MAX (32) and refuses
+    the entry with EVM_ARITY. Before s3 the build dropped the entry
+    with no diagnostic and exited 0. The row `test/lower/arity33.lang`
+    (33 word arguments) gives one lower refusal and one build check.
+    The row KILLS M-a1 (the refusal only when the extra count is more
+    than ENTRY_PARAMS_MAX). A U256 entry takes at most 31 words: at 32
+    words the ABI text is 258 bytes, more than the limit of 255
+    (EVM_SIGNATURE). The P2 text of S10 s2 (30 words) stays as
+    history.
+  - The attest tags (Q-S10-13 (a)). `attestMsg` takes a tag as its
+    first word: `hash (hash (hash dom side) n) d`. `enact` uses
+    `enactTag` (ASCII enact, 0x656e616374) and `accept` uses
+    `acceptTag` (ASCII accept, 0x616363657074). The form has 4 copies:
+    `examples/twin.lang`, `examples/enact.lang`,
+    `examples/elgamal.lang` and `test/check/enact-twice.lang`. The
+    Schnorr words sA, sR, sB and sE change (STATUS `## S10 s3`). There
+    are 3 cross rows: the evals `elgamal attestCrossTag => 0` and
+    `enact attestCross => 0`, and step 12 of
+    `test/run/twin-remote.script` (attest A on `accept`, revert).
+    `test/run.sh` KILLS M-x1 (`examples/twin.lang`, the `accept` tag:
+    step 12 gives `accept ok`), and the eval row `enact attestCross`
+    KILLS M-x2 (`examples/enact.lang`, the tag). The tags add 53 bytes:
+    init code 24025, init code plus argument 24057, runtime 23932, 644
+    bytes free under EIP-170 (VALIDATION).
+  - The differential (D4, PLAN 7). Part 3 of `test/diff.sh` runs
+    `examples/twin.lang` twice in one geth chain state: side 0 (home)
+    at the receiver, side 1 (remote) at the address remote, and the
+    mock in mode 0 at the token. The steps are
+    `test/run/twin-d4-home.script` (25 steps) and
+    `test/run/twin-d4-remote.script` (9 steps). Each step must give the
+    result of `langc run`. The vectors: the cast words of
+    `build/sigmatool cast` (key 7, Q-S10-4 (a)), the ring words of
+    `zkSign` at eval time, and the DLEQ proofs of the close shares 12
+    and 17 (nonces 31, 37, 41 and 43). In `test/evmchain.sh` a set
+    variable `to` is the address of the call in place of the receiver;
+    each old caller gives the same result. The 5 rows: 2 script rows
+    (the steps and the storage of each side), the mock row (the mock
+    balances equal the sums of the pull and pay rows of both runs) and
+    2 guest rows (`rxOf` and `ryOf` of each side equal `homeAdd` of
+    `examples/enact.lang`, `pair 1100u 1100u`). `test/run.sh` runs the
+    2 scripts too (runs 8 to 10).
+  - The gas rows (O17). The function `gas` of `test/evmchain.sh` runs
+    the prestate of each step again with `evm run --statdump`, with no
+    intrinsic gas. `test/run/twin-d4.gas` gives one bound for each of
+    the 13 entries: the largest gas of the entry in the first run. Each
+    entry is one row (13 rows, VALIDATION). The `claim` of s3 has no
+    ring signature (Q-S10-11 (c)), thus no ring size bounds its gas
+    yet; s4 takes a new bound from its first run.
+  - Q-S10-16 (a). No row called `castSlot` on side 1, thus M-d3b was
+    LIVE. Step 6 of `test/run/twin-d4-remote.script` is a `castSlot`
+    on side 1 with the slot 0 words of voter 0 of the home script, want
+    revert (gas 2567, under the bound 82143). `test/run.sh` KILLS
+    M-d3b.
+  - The mutants (scratch copies, `cp` + `cmp` restore, `make -B` for
+    src): M-a1, M-x1, M-x2, M-d1, M-d2, M-d3b, M-g1, M-d4, M-d5, M-d6
+    and M-g2 KILLED; M-d3 EQUIVALENT (STATUS `## S10 s3`).
+  - Counts: evals 353 to 355, lower refusals 17 to 18, build checks 34
+    to 35, runs 8 to 10, diff gate 15 to 33 rows. Under Q-S10-15 (a)
+    s4 gives the bLSAG slice and s5 closes S10; the DEVIATION of s2
+    stays open into s4.
 
 ## 11. Questions for the USER (S1)
 
@@ -1397,7 +1462,7 @@ Q-S9-1 (a) and Q-S9-2 (a) are taken. They wait for the USER ruling.
 
 Q-S9-3 (a) and Q-S9-4 (b) are taken. They wait for the USER ruling.
 
-### S10 questions (OPEN)
+### S10 questions (RULED)
 
 - Q-S10-1 (the port scope). (a) port the parts of intent-lang ef5abe8
   that are not secp256k1: the check.c walk skip, sigma.{c,h}, the 11
@@ -1447,7 +1512,8 @@ Q-S9-3 (a) and Q-S9-4 (b) are taken. They wait for the USER ruling.
   diagnostic (`EVM_ARITY`, a small src change in `src/lower.c`, one
   refusal row). RECOMMENDED: a dropped entry is a contract that builds
   and does not do its job. (b) keep it and record the trap in STATUS.
-  OPEN. s2 records the trap; each twin.lang entry has 30 words at most.
+  RULED (a) (2026-10-25, O77). s2 records the trap; each twin.lang
+  entry has 30 words at most.
 - Q-S10-9 (the pool price math does not lower). (a) a builder change
   before twin.lang (as Q-S10-5 (a)): the kit primitives `u256Mul` (EVM
   MUL, a trap on overflow) and `u256Div` (EVM DIV, a trap on 0), rows
@@ -1479,7 +1545,8 @@ Q-S9-3 (a) and Q-S9-4 (b) are taken. They wait for the USER ruling.
   same message form `hash (hash side n) word`. A cross use needs a hash
   preimage of a small tag, thus it is not open in practice. (a) a
   domain tag in `attestMsg` in s3 (the Schnorr words of the run rows
-  change). RECOMMENDED. (b) keep it and record why. OPEN.
+  change). RECOMMENDED. (b) keep it and record why. RULED (a)
+  (2026-10-25, O77): one tag for each use (`enact` and `accept`).
 - Q-S10-14 (the R19 row names a kit primitive). The S2 row
   `test/check/pruned-op.lang` (R19, a kit row) said that `u256Mul` and
   `u256Div` are not in the language. Q-S10-9 (a) made them kit
@@ -1488,9 +1555,27 @@ Q-S9-3 (a) and Q-S9-4 (b) are taken. They wait for the USER ruling.
   `test/check/kit.txt` and `test/check/expect.txt` stay. RECOMMENDED.
   (b) keep `u256Mul`, drop the kit row and expect REFUSE_KIT. (c) give
   the kit primitives new names. RULED (a) (2026-10-25, O75).
+- Q-S10-15 (the place of the shared bLSAG slice of Q-S10-11 (c): one
+  shared unrolled bLSAG routine for `cast` and `claim`, the open ring
+  fix of Q-S10-10 (a) and the H_i source of Q-S10-12). (a) before the
+  S10 close: s3 gives the differential, the gas rows and the mutants,
+  s4 gives the bLSAG slice, s5 closes S10. The claim of PLAN 7 then
+  includes the claim ring signature on the EVM, and the DEVIATION of
+  s2 closes in S10. RECOMMENDED. (b) after the S10 close: s3 also
+  closes S10, and the DEVIATION stays open into a new slice S11. After
+  the review fixes of O76 the runtime has 697 free bytes (O75: 1139);
+  s4 stops and asks if the shared routine does not fit. RULED (a)
+  (2026-10-25, O77).
+- Q-S10-16 (the LIVE mutant M-d3b: no gate row calls `castSlot` on
+  side 1, thus the side check of `castSlot` has no test). (a) one row
+  in `test/run/twin-d4-remote.script`: a `castSlot` on side 1 with the
+  slot 0 words of voter 0 of `test/run/twin-d4-home.script`, want
+  revert. RECOMMENDED. (b) record M-d3b LIVE as a known gap and put the
+  row in s4. (c) an eval row in `test/twin.txt` on a side 1 state.
+  RULED (a) (2026-10-25, O77).
 
 Q-S10-1 (a) and Q-S10-4 (a) are taken in s1. Q-S10-2 (a), Q-S10-3 (a),
 Q-S10-5 (a), Q-S10-6 (a) and Q-S10-7 (a) are taken in s2 (O75). The
 USER ruled Q-S10-9 (a), Q-S10-10 (a), Q-S10-11 (c), Q-S10-12 (a) and
-Q-S10-14 (a) (2026-10-25). Q-S10-8 and Q-S10-13 wait for the USER
-ruling.
+Q-S10-14 (a) (2026-10-25), and Q-S10-8 (a), Q-S10-13 (a), Q-S10-15
+(a) and Q-S10-16 (a) (2026-10-25, s3). No S10 question is OPEN.

@@ -1,0 +1,17 @@
+-- The gas bound of each entry of examples/twin.lang in test/diff.sh part 3
+-- (S10 s3): the largest gas of the entry in the first run (2026-10-25, geth
+-- evm 1.14.12, `evm run --statdump`, no intrinsic gas). A gas above its
+-- bound is a FAIL row.
+accept 38054
+cast 372761
+castSlot 82143
+claim 76543
+close 145009
+decidedOf 2533
+deposit 120328
+enact 52506
+openedOf 2636
+rxOf 2407
+ryOf 2429
+seal 63660
+sideOf 2384

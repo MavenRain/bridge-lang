@@ -882,3 +882,134 @@ adds 13 twin DSL regression rows. The other host counts do not change:
 differential 14 host runs, run refusals 10, asmtool 8 checks, builds 3,
 dispatch 20 checks, evm steps 43, differential 14 EVM rows, mock 13
 rows, diff 15 rows.
+
+## S10 s3
+
+Slice S10 s3 (the two-deployment differential, the gas rows and the
+contract mutants, PLAN 7, Q-S10-8 (a), Q-S10-13 (a), Q-S10-15 (a) and
+Q-S10-16 (a)) is complete. The change is not committed; its base is
+the USER commit 5e4b34b (tree f9e91e4, the staged S10 s2 tree). The
+gate `make check` is GREEN, exit 0. There is a src change: the entry
+arity check of `src/lower.c`.
+
+DEVIATIONS for the USER:
+
+- The claim has no ring signature on the EVM (Q-S10-11 (c), temporary,
+  as in S10 s2). Under Q-S10-15 (a) the DEVIATION stays open into S10
+  s4: s4 gives one shared unrolled bLSAG routine for `cast` and
+  `claim`, then the claim ring signature on the EVM. s4 stops and asks
+  if the routine does not fit under EIP-170 (644 free bytes).
+- The open ring fix of Q-S10-10 (a) stays open into s4 (Q-S10-12 (a)).
+  s4 starts with a ruling on the source of H_i: (b) the closed key
+  table or (c) a zkHp lowering.
+
+Changes (O77):
+
+- `src/lower.c`: `residualize` refuses an entry with more than
+  ENTRY_PARAMS_MAX (32) word arguments with EVM_ARITY (Q-S10-8 (a)).
+  Before s3 the build dropped the entry with no diagnostic and exited
+  0.
+- `test/lower/arity33.lang` (new, EVM_ARITY, a row of
+  `test/lower/expect.txt`): an entry with 33 word arguments.
+- `examples/twin.lang`, `examples/enact.lang`, `examples/elgamal.lang`
+  and `test/check/enact-twice.lang`: `attestMsg` takes a tag as its
+  first word (Q-S10-13 (a)), `hash (hash (hash dom side) n) d`, with
+  `enactTag` (ASCII enact) for `enact` and `acceptTag` (ASCII accept)
+  for `accept`. The Schnorr words change (below).
+- `test/eval/expect.txt`: 2 cross rows, `elgamal attestCrossTag => 0`
+  and `enact attestCross => 0`.
+- `test/run/twin-home.script`, `test/run/twin-remote.script` and
+  `test/run/twin-remote.out`: the new attest words, and the cross row
+  of the remote script (step 12, attest A on `accept`, revert).
+- `test/run/twin-d4-home.script` (25 steps), `test/run/twin-d4-home.out`,
+  `test/run/twin-d4-remote.script` (9 steps) and
+  `test/run/twin-d4-remote.out` (new): the D4 runs. `test/run.sh` runs
+  `examples/twin.lang` for them. Step 6 of the remote script is the
+  row of Q-S10-16 (a): a `castSlot` on side 1 with the slot 0 words of
+  voter 0 of the home script, revert.
+- `test/evmchain.sh`: a set variable `to` is the address of the call in
+  place of the receiver (`step`, `logs`), and the new function `gas`.
+  Each old caller gives the same result.
+- `test/diff.sh`: part 3, the D4 differential (2 script rows, the mock
+  row, 2 guest rows) and the gas rows (one for each of the 13 entries
+  of `test/run/twin-d4.gas`).
+- `test/run/twin-d4.gas` (new): the gas bound of each entry.
+- `docs/VALIDATION.md`: the S10 s3 size table and the gas section.
+
+Traps found in S10 s3:
+
+- A U256 entry takes at most 31 words. At 32 words the build gives
+  EVM_SIGNATURE: the ABI text is 258 bytes, more than the limit of 255.
+  The P2 text of S10 s2 says 30 (history; this is the s3 measure).
+- The examples of `examples/kit.txt` need `langc --kit eval`.
+- The twin scripts start with an `init` line. The EVM step loop skips
+  that line: the deploy gives the side word.
+- An awk bound file read with `FNR == NR` passes an empty bound file
+  (the test is then true for each line of the next file). Use
+  `FILENAME == ARGV[1]`.
+- `evm run` adds no intrinsic gas. The gas rows give the gas of the
+  execution only.
+- A mutant of `examples/twin.lang` changes `langc run` and the EVM code
+  the same way. Thus the diff rows of the steps, the side storage and
+  the mock do not see it; only the run rows of `test/run.sh` and the
+  gas rows see it.
+- No row called `castSlot` on side 1 until Q-S10-16 (a), thus M-d3b was
+  LIVE in resume 8.
+
+The mutants (scratch copies, `cp` + `cmp` restore, `make -B` for src):
+
+- M-a1 (`src/lower.c`, the refusal only when the extra count is more
+  than ENTRY_PARAMS_MAX): KILLED, `test/lower/arity33.lang`.
+- M-x1 (`examples/twin.lang`, the `accept` tag): KILLED, `test/run.sh`
+  (step 12 of `twin-remote.script` gives `accept ok`).
+- M-x2 (`examples/enact.lang`, the tag): KILLED, the eval row
+  `enact attestCross`.
+- M-d1 (`examples/twin.lang`, `enact` with no once check): KILLED,
+  `test/run.sh` (`twin-d4-home.script`, `twin-remote.script`).
+- M-d2 (`castSlot` with no open check): KILLED, `test/run.sh`
+  (`twin-d4-home.script`) and `test/twin.sh` (`slotAfterOpen`).
+- M-d3 (`cast` with no side check): EQUIVALENT. `slots` has one writer,
+  `castSlot`, and `castSlot` has its own side check. On side 1 `slots`
+  stays empty, thus a `cast` on side 1 does not find its slot word and
+  reverts. No row can kill M-d3 while the side check of `castSlot`
+  holds.
+- M-d3b (`castSlot` with no side check): LIVE in resume 8, KILLED after
+  Q-S10-16 (a) by `test/run.sh` (step 6 of `twin-d4-remote.script`
+  gives `castSlot ok`). `test/diff.sh` does not see it (the trap
+  above).
+- M-g1 (`claim` with one more hash test): KILLED, `test/diff.sh`, the
+  gas row of `claim` (76733, more than the bound 76543).
+- M-d4 (`examples/enact.lang`, `homeAdd` with `addW 101u 100u`):
+  KILLED, `test/diff.sh`, the 2 guest rows.
+- M-d5 (`src/evm.c`, the side word read at CODESIZE minus 31): KILLED,
+  `test/diff.sh`, the remote `sideOf` step and the remote side storage.
+- M-d6 (`src/evm.c`, the `pay` amount plus 1): KILLED, `test/diff.sh`,
+  7 FAIL rows (the D4 mock row is one of them).
+- M-g2 (`src/evm.c`, one more JUMPDEST at the start of the dispatcher):
+  KILLED, `test/diff.sh`, the 13 gas rows.
+
+The attest words of S10 s3 (key 7, s = (k + 7 e) mod r; `wordA` and
+`batchB` do not change; the S10 s2 words above are history):
+
+- sA, attest A (k = 23, `attestMsg enactTag 0u 1u wordA`, the remote
+  `enact` of n = 1):
+  0x16c7db2f9518158af598a29100524e94c3f6f0040de3e355d901cfa8d41af243u.
+- sB, attest B (k = 29, `attestMsg acceptTag 0u 0u batchB`, the
+  `accept` of batch 0):
+  0x268feef28dee689791678ad63da3acf52842a5a5af98decc4cd795d22db5112cu.
+- sR, `sRemove` of `examples/enact.lang` (k = 29,
+  `attestMsg enactTag 0u 2u` of the removeLiq word):
+  0x19216fc3a115aa4ef29669ad890882cab0deb9c59c99f95eb00bd7fbc23ea121u.
+- sE, `sSig` of `examples/elgamal.lang` (k = 23,
+  `attestMsg acceptTag 0u 1u 42u`):
+  0x2c254087c58dacac565702fa12e3acecadff90b43dbe5b5f7d9a6c67b9f07e7eu.
+
+| Count | S10 s2 | S10 s3 | Reason |
+|---|---|---|---|
+| evals | 353 | 355 | `elgamal attestCrossTag`, `enact attestCross` (Q-S10-13 (a)) |
+| lower refusals | 17 | 18 | `arity33.lang` (Q-S10-8 (a)) |
+| build checks | 34 | 35 | the same row |
+| runs | 8 | 10 | `twin-d4-home.script`, `twin-d4-remote.script` |
+| diff gate rows | 15 | 33 | 5 D4 rows (2 script rows, the mock row, 2 guest rows) and 13 gas rows |
+
+The other count lines of the gate log do not change.

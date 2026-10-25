@@ -388,3 +388,57 @@ In S10 s2 the claim has no ring signature on the EVM (Q-S10-11 (c)).
 With the ring signature of `cast` on the claim (the mutant M-t1, the
 `voters` ring), the build gives EVM_SIZE. Thus a claim ring signature
 needs a shared bLSAG routine (a later slice, O75).
+
+## The size of the twin contract (S10 s3)
+
+The attest tags of Q-S10-13 (a) add 53 bytes to each build. Measured on
+2026-10-25 on 5e4b34b with the S10 s3 changes:
+
+| Build | bytes | Limit | Free |
+|---|---|---|---|
+| init code | 24025 | 49152 (EIP-3860) | 25127 |
+| init code plus argument | 24057 | 49152 (EIP-3860) | 25095 |
+| runtime | 23932 | 24576 (EIP-170) | 644 |
+
+The S10 s2 table above is history. S10 s4 must put the shared bLSAG
+routine in these 644 bytes, or stop and ask (Q-S10-15 (a)).
+
+## The gas of the twin contract (S10 s3)
+
+Part 3 of `test/diff.sh` runs `examples/twin.lang` twice in one chain
+state (side 0 at the receiver, side 1 at the address remote) with the
+steps of `test/run/twin-d4-home.script` (25 steps) and
+`test/run/twin-d4-remote.script` (9 steps). After each step, the function
+`gas` of `test/evmchain.sh` runs the same prestate again with `evm run
+--statdump`. The value is the gas of the execution. `evm run` does not
+add the intrinsic gas of a transaction. The file `test/run/twin-d4.gas`
+gives one bound for each entry: the largest gas of the entry in the first
+run, not a hand value. The gate gives one row for each entry of that
+file. A step with a gas above the bound of its entry, a step with no
+bound and an entry with no step are FAIL rows. The deploy is not a step,
+thus it has no gas row.
+
+Measured on 2026-10-25 on 5e4b34b with the S10 s3 changes, with geth
+`evm` 1.14.12. The steps are in script order; h is side 0, r is side 1.
+
+| Entry | Steps | Gas of each step | Bound |
+|---|---|---|---|
+| `castSlot` | 8 | h 82143, 82040, 82040, 82040, 82040, 82040; h 4895 (revert after the open); r 2567 (revert, side 1) | 82143 |
+| `cast` | 5 | h 372761 (voter 0), 199125 (voter 1), 199125 (voter 2), 95497 (voter 0 again, revert); r 2604 (revert) | 372761 |
+| `close` | 2 | h 120465 (slot 0), 145009 (slot 1) | 145009 |
+| `enact` | 3 | h 41485, 2662 (again, revert); r 52506 (attest A) | 52506 |
+| `deposit` | 3 | h 120328, 49075, 49075 | 120328 |
+| `seal` | 1 | h 63660 | 63660 |
+| `accept` | 1 | r 38054 (attest B) | 38054 |
+| `claim` | 2 | r 76543, 6330 (the replay, revert) | 76543 |
+| `sideOf` | 2 | h 2384; r 2384 | 2384 |
+| `openedOf` | 2 | h 2636, 2636 | 2636 |
+| `decidedOf` | 1 | h 2533 | 2533 |
+| `rxOf` | 2 | h 2407; r 2407 | 2407 |
+| `ryOf` | 2 | h 2429; r 2429 | 2429 |
+
+The first cast costs 173636 more than each later cast, and the first
+deposit costs 71253 more than each later deposit. Under the DEVIATION
+(Q-S10-11 (c)) the EVM `claim` has no ring signature, thus no ring size
+bounds its gas yet (O17). S10 s4 adds the ring signature to the claim and
+takes a new bound for `claim` from its first run.

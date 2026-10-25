@@ -170,7 +170,11 @@ def dleqOk : Point -> Point -> Point -> Prod (Prod Point Point) U256 -> Flag :=
     flagIf (ptEq (ecMul gen (second p)) (ecAdd (first (first p)) (ecMul x (dleqC (first (first p)) (second (first p)) x c1 d))))
       (ptEq (ecMul c1 (second p)) (ecAdd (second (first p)) (ecMul d (dleqC (first (first p)) (second (first p)) x c1 d))))
       flagNo
-def attestMsg : U256 -> U256 -> U256 -> U256 := fun (side : U256) (n : U256) (d : U256) => hash (hash side n) d
+-- The attest tags (Q-S10-13 (a)): ASCII enact and ASCII accept. The tag is the first word of the
+-- message, so a message of one use is not a message of the other use (a match needs a keccak collision).
+def enactTag : U256 := 0x656e616374u
+def acceptTag : U256 := 0x616363657074u
+def attestMsg : U256 -> U256 -> U256 -> U256 -> U256 := fun (dom : U256) (side : U256) (n : U256) (d : U256) => hash (hash (hash dom side) n) d
 def schnorrOk : Point -> U256 -> Prod Point U256 -> Flag := fun (y : Point) (msg : U256) (sig : Prod Point U256) =>
   ptEq (ecMul gen (second sig)) (ecAdd (first sig) (ecMul y (hash (hash (hashPt (first sig)) (hashPt y)) msg)))
 
@@ -278,12 +282,12 @@ def close : (env : Env) -> (s : State) -> (n j e1x e1y a1x a1y b1x b1y z1 e2x e2
       none
 
 -- Entry: run the Decision (tag 0 keep, 1 addLiq, 2 removeLiq) of proposal n once. Home: the
--- stored Decision word. Remote: the Schnorr attest of attestMsg 0u n word (key 7).
+-- stored Decision word. Remote: the Schnorr attest of attestMsg enactTag 0u n word (key 7).
 def enact : (env : Env) -> (s : State) -> (n tag dx dy sx sy ss : U256) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) (n tag dx dy sx sy ss : U256) =>
     flagIf (flagIf (mapGet (enacted s) n) flagNo flagYes)
       (flagIf (u256Le tag 2u)
-      (flagIf (flagIf (u256Eq (side s) 0u) (u256Eq (mapGet (decided s) n) (hash (hash tag dx) dy)) (schnorrOk pk (attestMsg 0u n (hash (hash tag dx) dy)) (pair (pair sx sy) ss)))
+      (flagIf (flagIf (u256Eq (side s) 0u) (u256Eq (mapGet (decided s) n) (hash (hash tag dx) dy)) (schnorrOk pk (attestMsg enactTag 0u n (hash (hash tag dx) dy)) (pair (pair sx sy) ss)))
       (flagIf (flagIf (u256Eq tag 0u) (flagIf (u256Eq dx 0u) (u256Eq dy 0u) flagNo) (flagIf (u256Eq tag 1u) (addOk (rx s) (ry s) dx dy) (removeOk (rx s) (ry s) dx dy)))
       (flagIf (u256Le 1u (flagIf (u256Eq tag 1u) (addLiqX (rx s) (ry s) dx dy) (flagIf (u256Eq tag 2u) (removeLiqX (rx s) (ry s) dx dy) (rx s))))
       (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (mapSet (enacted s) n flagYes) (flagIf (u256Eq tag 1u) (addLiqX (rx s) (ry s) dx dy) (flagIf (u256Eq tag 2u) (removeLiqX (rx s) (ry s) dx dy) (rx s))) (flagIf (u256Eq tag 1u) (addLiqY (rx s) (ry s) dx dy) (flagIf (u256Eq tag 2u) (removeLiqY (rx s) (ry s) dx dy) (ry s))) (batchH s) (batchN s) (sealAt s) (accepted s) (claimed s) (batchSize s) (batchCredit s)) nil))
@@ -314,7 +318,7 @@ def seal : (env : Env) -> (s : State) -> Option (Prod State (List Out)) :=
 def accept : (env : Env) -> (s : State) -> (n h sx sy ss : U256) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) (n h sx sy ss : U256) =>
     flagIf (flagIf (mapGet (accepted s) h) flagNo flagYes)
-      (flagIf (schnorrOk pk (attestMsg (u256Sub 1u (side s)) n h) (pair (pair sx sy) ss))
+      (flagIf (schnorrOk pk (attestMsg acceptTag (u256Sub 1u (side s)) n h) (pair (pair sx sy) ss))
       (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (rx s) (ry s) (batchH s) (batchN s) (sealAt s) (mapSet (accepted s) h flagYes) (claimed s) (batchSize s) (batchCredit s)) nil))
       none)
       none

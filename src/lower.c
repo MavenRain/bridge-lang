@@ -228,11 +228,20 @@ static int residualize(Machine *m, uint32_t env, uint32_t out, uint32_t i, Resid
     if (t == NULL) return -1;
     r->arg_count++;
   }
+  uint32_t over = 0; /* word arguments past ENTRY_PARAMS_MAX (Q-S10-8: EVM_ARITY, not a silent drop) */
+  while (t->kind == VAL_PI && is_word_type(t->dom)) {
+    t = closure_apply(m, t, val_var(m, r->arg_count + over + 2u));
+    if (t == NULL) return -1;
+    over++;
+  }
   const Value *p = val_is(t, OP_OPTION) && val_is(t->args[0], OP_PROD) ? t->args[0] : NULL;
   int entry = p != NULL && is_family_value(p->args[0], m->state_family) && val_is(p->args[1], OP_LIST)
               && is_family_value(p->args[1]->args[0], out);
   int role = is_word_type(t) ? 2 : entry;
   if (role == 0) return 0;
+  if (over > 0)
+    return diag_fail(m->diag, "EVM_ARITY", m->defs[i].name, "the entry has %u word arguments, the limit is %u",
+                     (unsigned)(r->arg_count + over), ENTRY_PARAMS_MAX) - 1;
   r->result = t;
   m->fuel = EVAL_FUEL_STEPS;
   const Value *v = def_value(m, i);
