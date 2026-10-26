@@ -85,6 +85,16 @@ expect() {
   [ "$2" = "$3" ] || { echo "FAIL build output $1: want $2, got $3"; fail=$((fail + 1)); }
 }
 
+# The messages of both shared routine call refusals name the call (S10 s5, O79).
+status=0
+build/langc --kit build test/lower/shared-arg.lang >/dev/null 2>"$tmp/err" || status=$?
+expect 'shared-arg exit' 1 "$status"
+expect 'shared-arg message' 'langc: REFUSE_LOWER: mix: K4c does not lower a shared routine call (a word that can trap or revert: the words are strict at the call)' "$(head -n 1 "$tmp/err")"
+status=0
+build/langc --kit build test/lower/shared-state.lang >/dev/null 2>"$tmp/err" || status=$?
+expect 'shared-state exit' 1 "$status"
+expect 'shared-state message' 'langc: REFUSE_LOWER: mix: K4c does not lower a shared routine call (want the Env and the state of the entry, then a word for each param)' "$(head -n 1 "$tmp/err")"
+
 # The REFUSE_LOWER message of a List field value names the whole value (O-c11-1, O-c14-1).
 status=0
 build/langc --kit build test/lower/list-write.lang >/dev/null 2>"$tmp/err" || status=$?

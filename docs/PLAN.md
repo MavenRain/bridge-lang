@@ -372,7 +372,7 @@ The ring size bounds the gas of `claim` (O17).
 | S7 | `Enc`, `decrypt`, `open`, Schnorr attestation verify; host and precompile rows (port from intent-lang S5 and S6 when they exist) | s1 DONE (2026-10-23), the guest side (Q-S7-1 (a)): examples 46, parse refusals 19, check refusals 174, pool refusals 4, bridge refusals 3, kit-only refusals 22, evals 217, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the host and precompile rows wait for intent-lang S5 and S6 (O33); s2 DONE (2026-10-23), the port of intent-lang 1b65dec (the sealed `Enc`, the law-only `decrypt` and the host ElGamal) and the Q-S3-2 (a) item (O53 to O58, Q-S7-3 (a)): examples 50, parse refusals 19, check refusals 185, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 267, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; the precompile rows wait for the port of intent-lang S6 9b99528 (O33) |
 | S8 | `ZKBridge` as the mapping cylinder; `ZKBridge ≃ BridgeState`; bLSAG claim rings and key images | DONE (2026-10-23), the guest side (Q-S8-1 (a) to Q-S8-4 (a)): examples 47, parse refusals 19, check refusals 175, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 237, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; no src change and no domain change (O38 to O43) |
 | S9 | Part D: encrypted ballots, `tallyEnc`, the tally law, liquidity Decisions, the remote enactment | DONE (2026-10-24), Part D is closed. s1 DONE (2026-10-23), the tally, the tally law and the liquidity Decisions (Q-S9-1 (a), Q-S9-2 (a)): examples 52, parse refusals 19, check refusals 188, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 277, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s1 has no src change and no domain change (O59 to O63). s2 DONE (2026-10-24), the remote enactment and the signed ballot in the kit examples `examples/enact.lang` and `examples/ballot.lang` (Q-S9-3 (a), Q-S9-4 (b)): examples 54, parse refusals 19, check refusals 191, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 314, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s2 has no src change and no domain change (O64 to O68) |
-| S10 | The contract of section 7: writer, two-deployment differential, gas and size rows | s1 DONE (2026-10-24), the port of the intent-lang S7 one-hot proof (ef5abe8, Q-S10-1 (a)) and the signed encrypted cast in the kit example `examples/cast.lang` (Q-S10-4 (a), Q-S10-7 (a)): examples 57, parse refusals 19, check refusals 193, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 335, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures, precompile 135 steps; s1 has a src change (`src/front/sigma.c`, `src/front/sigma.h`, the ZK walk skip of `src/front/check.c`) and a domain change (`ZKProof`, `Transcript`, `verified`) (O70 to O74); s2 DONE (2026-10-25), the twin contract `examples/twin.lang` (one bytecode, two deployments, the side value as the `init` argument, Q-S10-2 (a), Q-S10-3 (a), Q-S10-5 (a)) and the kit primitives `u256Mul` and `u256Div` (Q-S10-9 (a)): examples 59, evals 353, rings 7 built 2 refused, runs 8, lower refusals 17, build checks 34, precompile 143 steps, gate 0 failures; s2 has a src change (the `init` argument in `src/lower.c`, `src/evm.c`, `src/evm.h`, `src/asm.h` and `src/front/check.c`; `u256Mul` and `u256Div` in `src/front/core.h`, `src/front/check.c`, `src/front/eval.c` and `src/lower.c`) and a temporary DEVIATION from PLAN 7 (the claim has no ring signature on the EVM, Q-S10-11 (c)) (O75); s3 DONE (2026-10-25), the geth two-deployment differential of `examples/twin.lang` (D4), the gas rows and the contract mutants (Q-S10-8 (a), Q-S10-13 (a), Q-S10-15 (a), Q-S10-16 (a)): evals 355, lower refusals 18, build checks 35, runs 10, diff gate 33 rows, gate 0 failures; s3 has a src change (the entry arity check in `residualize`, `src/lower.c`) (O77); s4 DONE (2026-10-25), the bLSAG slice: one shared unrolled routine `sharedRing` for `cast` and `claim` (the routine path of `src/ir.h`, `src/lower.c` and `src/evm.c`), the open ring fix of Q-S10-10 (a) with the closed key table of Q-S10-17 (b), the claim ring signature on the EVM in the 4 ring map fields of Q-S10-18 (a) (runtime 24166 bytes, 410 free under EIP-170): lower refusals 20, build checks 40, twin rows 14, diff gate 33 rows, gate 0 failures; s4 has a src change (the routine path) and CLOSES the DEVIATION of s2 (O78); s5 (the S10 close) is PLANNED |
+| S10 | The contract of section 7: writer, two-deployment differential, gas and size rows | s1 DONE (2026-10-24), the port of the intent-lang S7 one-hot proof (ef5abe8, Q-S10-1 (a)) and the signed encrypted cast in the kit example `examples/cast.lang` (Q-S10-4 (a), Q-S10-7 (a)): examples 57, parse refusals 19, check refusals 193, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 335, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures, precompile 135 steps; s1 has a src change (`src/front/sigma.c`, `src/front/sigma.h`, the ZK walk skip of `src/front/check.c`) and a domain change (`ZKProof`, `Transcript`, `verified`) (O70 to O74); s2 DONE (2026-10-25), the twin contract `examples/twin.lang` (one bytecode, two deployments, the side value as the `init` argument, Q-S10-2 (a), Q-S10-3 (a), Q-S10-5 (a)) and the kit primitives `u256Mul` and `u256Div` (Q-S10-9 (a)): examples 59, evals 353, rings 7 built 2 refused, runs 8, lower refusals 17, build checks 34, precompile 143 steps, gate 0 failures; s2 has a src change (the `init` argument in `src/lower.c`, `src/evm.c`, `src/evm.h`, `src/asm.h` and `src/front/check.c`; `u256Mul` and `u256Div` in `src/front/core.h`, `src/front/check.c`, `src/front/eval.c` and `src/lower.c`) and a temporary DEVIATION from PLAN 7 (the claim has no ring signature on the EVM, Q-S10-11 (c)) (O75); s3 DONE (2026-10-25), the geth two-deployment differential of `examples/twin.lang` (D4), the gas rows and the contract mutants (Q-S10-8 (a), Q-S10-13 (a), Q-S10-15 (a), Q-S10-16 (a)): evals 355, lower refusals 18, build checks 35, runs 10, diff gate 33 rows, gate 0 failures; s3 has a src change (the entry arity check in `residualize`, `src/lower.c`) (O77); s4 DONE (2026-10-25), the bLSAG slice: one shared unrolled routine `sharedRing` for `cast` and `claim` (the routine path of `src/ir.h`, `src/lower.c` and `src/evm.c`), the open ring fix of Q-S10-10 (a) with the closed key table of Q-S10-17 (b), the claim ring signature on the EVM in the 4 ring map fields of Q-S10-18 (a) (runtime 24166 bytes, 410 free under EIP-170): lower refusals 20, build checks 40, twin rows 14, diff gate 33 rows, gate 0 failures; s4 has a src change (the routine path) and CLOSES the DEVIATION of s2 (O78); s5 IN PROGRESS (2026-10-25), routine call refusal text fixed and close audit recorded (O79): lower refusals 21, build checks 45, twin rows 14, diff gate 33 rows; amendment is OPEN (Q-S10-19), S10 is not closed |
 | S11 | Mutants and close | PLANNED |
 
 ## 10. Open items
@@ -419,8 +419,11 @@ The ring size bounds the gas of `claim` (O17).
 - O15: reuse of the intent-lang slices (section 6). RULED: Q9 (a).
 - O16: `Stream` of batches is the one CC instance of the plan. Builder
   call.
-- O17: the ring size of a claim bounds its gas. S10 measures it. Builder
-  call.
+- O17: S10 measures the claim at ring size 3: 189658 execution gas
+  on the recorded steps of `test/diff.sh` (O78, O79). The twin contract
+  has three member indices and three signature responses. Other ring
+  sizes have no entry in this ABI and have no measured bound. A bound
+  for another size needs a new contract and new size and gas rows.
 - O18: the dash check of `test/gate.sh` skips `design/DESIGN.md`, because
   the design is verbatim and holds two em-dashes (tile-lang ruling
   2026-10-09). Builder call. S2 kept the exemption after the port (the
@@ -1207,11 +1210,10 @@ The ring size bounds the gas of `claim` (O17).
     that the args push).
   - The rows: `test/lower/shared-shape.lang`, `shared-arg.lang` and
     `shared-call.lang` (new). Lower refusals 18 to 20, build checks 35 to
-    40 (2 rows and 3 expect checks). The refuse text of a routine call
-    keeps the describer prefix of `refuse` (`src/lower.c:423`), which
-    names an entry word, not a routine call; the rows check the code
-    REFUSE_LOWER only. Not fixed in s4: S10 s5 fixes it or keeps it as a
-    known gap.
+    40 (2 rows and 3 expect checks). In s4 the refuse text of a routine
+    call kept the describer prefix of `refuse`, which names an entry
+    word. S10 s5 fixes both routine call refusals and checks the exact
+    text of `shared-arg.lang` and `shared-state.lang` (O79).
   - The check-clang trap. The IR change adds fields; 13 positional
     initializer sites in 6 files (`src/evm.c` and the test tools) leave
     them out. tcc (`-std=c99 -Wall -Werror`) accepts that; clang
@@ -1256,6 +1258,37 @@ The ring size bounds the gas of `claim` (O17).
     cannot kill M1 (a removed check lowers the gas). M2 (`src/evm.c`
     IR_STMT_ROUTINE arg store, arg slots 0 and 1 swapped) KILLED for
     `cast` and `claim`: `test/diff.sh` 16 failures of 33 rows.
+
+- O79: S10 s5 (2026-10-25), the close audit. The base is the USER
+  commit fe1e366; its tree is f2ea2ea717aae741b978c5e8d2b53aa2747f04e4.
+  The clean baseline passed with the 41 count lines of S10 s4.
+  The main loop makes the changes by hand, with no commit or push.
+  - Both refusals in `lower_routine_call` name a shared routine call.
+    The entry word refusal text stays the same. `test/build.sh`
+    checks exit 1 and the full message of `shared-arg.lang` (a word
+    that can trap) and of `shared-state.lang` (a new state in place of
+    the state of the entry). Lower refusals rise from 20 to 21 and
+    build checks from 40 to 45. The separate check-clang passed.
+  - STATUS `S10 close` maps each exit to its slice and evidence.
+    Amendment in the twin bytecode is OPEN (Q-S10-19). The twin
+    `enact` supports only keep, addLiq and removeLiq. The guest
+    `amend` and separate DAO table writer do not add that effect to
+    this bytecode. No scope ruling that removes it was found.
+  - O17 is measured for ring size 3 only: the claim bound is 189658
+    execution gas on the recorded steps. Other ring sizes have no
+    ABI entry or measured bound. This is not a bound for all prestates.
+  - After the diagnostic fix, direct builds give runtime 24166 bytes
+    (410 free under EIP-170), init code 25062 bytes, and init plus the
+    side argument 25094 bytes (under EIP-3860). See VALIDATION.
+  - The s2 DEVIATION stays CLOSED. The key table, four ring map
+    fields and claimed key of Q-S10-17 (b) and Q-S10-18 (a) stay as
+    ruled. S10 stays OPEN until amendment is implemented or the USER
+    rules a scope change. S11 remains the mutant and project close
+    slice. No new scope ruling is inferred from this audit.
+  - Review of the s5 stage (2026-10-25): the `shared-state.lang` row,
+    the S10 row text, the VALIDATION size source and the gate results
+    in STATUS are fixed. The serial review gate is
+    `bridge-lang-work/S10-s5-review-gate.log`.
 
 ## 11. Questions for the USER (S1)
 
@@ -1651,9 +1684,19 @@ Q-S9-3 (a) and Q-S9-4 (b) are taken. They wait for the USER ruling.
   (24166 bytes, 410 free). (b) no claim ring signature on the EVM. (c)
   other. RULED (a) (2026-10-25, O78).
 
+- Q-S10-19 (OPEN, amendment in PLAN 7). The twin `enact` accepts
+  only tags 0 to 2 (keep, addLiq, removeLiq). It has no constitution
+  installation or poll reset. Orbit-lang PLAN 7 requires amendment
+  to install the selected constitution, increment the poll and clear
+  the tally. The guest prelude and separate table writer keep
+  amendment, but the twin bytecode does not. (a) keep S10 OPEN until
+  this effect is implemented or an existing scope ruling is verified.
+  RECOMMENDED. (b) move EVM amendment support to S11 and close S10
+  with that explicit scope change. No option has been ruled.
+
 Q-S10-1 (a) and Q-S10-4 (a) are taken in s1. Q-S10-2 (a), Q-S10-3 (a),
 Q-S10-5 (a), Q-S10-6 (a) and Q-S10-7 (a) are taken in s2 (O75). The
 USER ruled Q-S10-9 (a), Q-S10-10 (a), Q-S10-11 (c), Q-S10-12 (a) and
 Q-S10-14 (a) (2026-10-25), and Q-S10-8 (a), Q-S10-13 (a), Q-S10-15
 (a) and Q-S10-16 (a) (2026-10-25, s3), and Q-S10-17 (b) and Q-S10-18
-(a) (2026-10-25, s4). No S10 question is OPEN.
+(a) (2026-10-25, s4). Q-S10-19 is OPEN; S10 is not closed.

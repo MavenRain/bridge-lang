@@ -654,7 +654,7 @@ static const IrExpr *lower_routine_call(Low *l, Stmts *b, const Value *v) {
   const Value *env = argc == r->param_count + 2u ? args[argc - 1u] : NULL;
   const Value *pre = env != NULL ? args[argc - 2u] : NULL;
   if (env == NULL || env->kind != VAL_VAR || env->nat != 0u || pre->kind != VAL_VAR || pre->nat != 1u)
-    return refuse(l, v, "as a shared routine call (want the Env and the state of the entry, then a word for each param)"), NULL;
+    return diag_fail(l->m->diag, "REFUSE_LOWER", l->entry, "K4c does not lower a shared routine call (want the Env and the state of the entry, then a word for each param)"), NULL;
   for (size_t i = 0; i < l->memo_count; i++)
     if (l->memo[i].value == v && block_has(b, l->memo[i].stmt)) return ir_local(l, l->memo[i].local);
   const IrExpr **fields = r->param_count > 0 ? low_alloc(l, r->param_count * sizeof *fields) : NULL;
@@ -669,7 +669,7 @@ static const IrExpr *lower_routine_call(Low *l, Stmts *b, const Value *v) {
   s->field_count = r->param_count;
   IrBlock pushed = {b->count > before ? (const IrStmt *const *)b->items + before : NULL, b->count - before};
   if (fields_may_trap(s) || block_may_trap(pushed))
-    return refuse(l, v, "as a shared routine call (a word that can trap or revert: the words are strict at the call)"), NULL;
+    return diag_fail(l->m->diag, "REFUSE_LOWER", l->entry, "K4c does not lower a shared routine call (a word that can trap or revert: the words are strict at the call)"), NULL;
   s->local = l->locals++;
   s->address = k;
   return push(l, b, s) && memo_add(l, v, s, s->local) ? ir_local(l, s->local) : NULL;

@@ -472,3 +472,30 @@ fields. The claim steps cost 18817 and 189658: the bound `claim 189658`
 replaces 76543, because the claim now checks the ring signature. The
 gas rows measure the `twin-d4` scripts only, thus row 11 of
 `test/run/twin-remote.script` is not in them.
+
+## The size and claim ring scope at the S10 close (S10 s5)
+
+The direct build of `examples/twin.lang` with the s5 change gives the
+sizes below. The s5 source change changes refusal text only, thus the
+runtime is 24166 bytes, the same as the direct s4 measure.
+
+| Build | bytes | Limit | Free |
+|---|---|---|---|
+| init code | 25062 | 49152 (EIP-3860) | 24090 |
+| init code plus side argument | 25094 | 49152 (EIP-3860) | 24058 |
+| runtime | 24166 | 24576 (EIP-170) | 410 |
+
+The S10 s3 init code table is history. The four ring map fields and
+the shared routine of s4 change the constructor as well as the runtime.
+
+| Claim ring size | Execution gas bound | Scope |
+|---|---|---|
+| 3 | 189658 | Maximum of the two recorded claim steps in the s4 differential: 18817 and 189658 |
+| Other sizes | No bound | No entry in the current ABI; a new contract and new measurements are required |
+
+`sharedRing` takes three member indices and three signature responses.
+`seal` requires batch size 3. The gas bound applies to the recorded
+steps and prestates of `twin-d4-home.script` and
+`twin-d4-remote.script`, not all calldata or all storage states. It
+excludes transaction intrinsic gas. O17 is closed for the supported
+ring size; larger or variable rings need a USER scope decision in S11.

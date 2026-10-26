@@ -1,0 +1,10 @@
+-- REFUSE_LOWER (S10 s5): a shared routine call takes the Env and the state of
+-- the entry first. mix gives a new state, thus the call of sharedMix is refused.
+state State := makeState (count : U256)
+def init : State := makeState 0u
+
+def sharedMix : (env : Env) -> (s : State) -> (a b : U256) -> U256 :=
+  fun (env : Env) (s : State) (a b : U256) => hash a b
+
+def mix : (env : Env) -> (s : State) -> (a b : U256) -> U256 :=
+  fun (env : Env) (s : State) (a b : U256) => sharedMix env (makeState 0u) a b
