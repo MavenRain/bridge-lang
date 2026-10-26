@@ -1230,3 +1230,70 @@ the S10 row of PLAN kept `s5 is PLANNED`; VALIDATION named fe1e366
 and the s4 runtime as the size source (the s5 tree gives the same
 25062 and 24166 bytes); this section gave the gate rule, not the
 results; one line break in the paragraph above.
+
+## S11
+
+The S11 mutant work is DONE (2026-10-26). The base is the USER commit
+a99d3d8 (S10 s6). The serial baseline
+(`bridge-lang-work/S11-baseline.log`) and the serial final gate
+(`bridge-lang-work/S11-final-gate.log`) exit 0. The close of S11 is
+OPEN (below).
+
+The contract mutant matrix has 29 mutants: 28 KILLED and 1 EQUIVALENT
+(M-d3). The 19 mutants of S10 are in PLAN O77, O78 and O80. The 10
+S11 mutants of `examples/twin.lang` are below. PLAN O81 has the
+method.
+
+| Mutant | Entry | Change | Killing row or gate | Result |
+|---|---|---|---|---|
+| castReplay | cast | used key image check to flagYes | `test/diff.sh`, `test/run.sh` | KILLED |
+| acceptReplay | accept | accepted hash check to flagYes | `test/run.sh` (`twin-remote.out`) | KILLED |
+| claimReplay | claim | claimed key check to flagYes | `test/run.sh` (`twin-remote.out`, `twin-d4-remote.out`) | KILLED |
+| depositFull | deposit | `batchSize` 2u to 3u | twin fourthDeposit | KILLED |
+| closeOrder | close | slot 1 before slot 0 | new twin closeOneFirst 0 | KILLED |
+| sealBound | seal | `natLe sealAt now` to flagYes | new twin sealEarly 0 | KILLED |
+| closeDleq12 | close | share 12 `dleqOk` to `dleqOkAny` | new twin closeBadDleq12 0 | KILLED |
+| castSum | cast | `sumPf` to `sumPfAny` | new twin castBadSum 0 | KILLED |
+| castSlot0 | castSlot | slot proof check to flagYes | new twin slotBadProof 0 | KILLED |
+| depositPool | deposit | `u256Le (c + 1) (ry s)` to flagYes | new twin depositPoolOut 0, depositPoolBound 1 | KILLED |
+
+| Count | S10 s6 | S11 |
+|---|---|---|
+| examples | 59 | 59 |
+| parse refusals | 19 | 19 |
+| check refusals | 193 | 193 |
+| pool, bridge, kit refusals | 4, 6, 22 | 4, 6, 22 |
+| evals, proves | 355, 2 | 355, 2 |
+| contracts written, refused | 2, 5 | 2, 5 |
+| rings built, refused | 7, 2 | 7, 2 |
+| guest differential evals | 28 | 28 |
+| runs, host differential runs, run refusals | 10, 14, 10 | 10, 14, 10 |
+| twin rows | 22 | 30 |
+| asm checks | 8 | 8 |
+| builds, lower refusals | 3, 21 | 3, 21 |
+| build checks | 45 | 45 |
+| dispatch checks | 20 | 20 |
+| EVM steps, differential rows | 43, 14 | 43, 14 |
+| precompile steps | 146 | 146 |
+| mock rows, diff rows | 13, 35 | 13, 35 |
+| emit execution regressions | 24 | 24 |
+| gate failures | 0 | 0 |
+
+S11 changes only `test/twin.lang` and `test/twin.txt`. There is no src
+change, no domain change and no size or gas change. VALIDATION does
+not change.
+
+Remaining limits:
+
+- The only supported ring size is 3. Larger rings or a variable ring
+  ABI need a USER scope ruling, a size check and new gas rows.
+- Not mutated: `openIs`, the close m bound and the claim index bounds.
+  `openIs` and the accepted hash possibly make them EQUIVALENT. No row
+  shows this.
+- `test/twin.sh` takes about 440 s. A reachable chain of 12 entries
+  from `init` does not end in `langc eval` in 240 s, thus the pool
+  bound rows start from a direct state (`poolAt`).
+
+Open: the S11 close. The PLAN section 11 questions Q-S7-3, Q-S9-1,
+Q-S9-2, Q-S9-3 and Q-S9-4 have taken answers and wait for the USER
+ruling. When the USER rules them, S11 is DONE and the plan is CLOSED.

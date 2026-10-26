@@ -3,7 +3,11 @@
 def e : Env := makeEnv 1 0x00000000000000000000000000000000000000aa
 def acceptedResult : Option (Prod State (List Out)) -> Flag := fun (o : Option (Prod State (List Out))) => option flagNo (fun (p : Prod State (List Out)) => flagYes) o
 def closeZero : Flag := acceptedResult (close e (init 0u) 1u 0u 0u 0u 1u 2u 0u 0u 13952815165197967125756980119533420968413717059059621486339195579699957758172u 0u 0u 1u 2u 0u 0u 14701443190095777811686243040802400733041311233058721930520713618723616718186u 0u)
+-- S11: z1 plus 1. The dleqC hash does not include z, thus the share 12 check refuses the close.
+def closeBadDleq12 : Flag := acceptedResult (close e (init 0u) 1u 0u 0u 0u 1u 2u 0u 0u 13952815165197967125756980119533420968413717059059621486339195579699957758173u 0u 0u 1u 2u 0u 0u 14701443190095777811686243040802400733041311233058721930520713618723616718186u 0u)
 def closeAlias : Flag := acceptedResult (close e (init 0u) 1u 0u 0u 0u 1u 2u 0u 0u 13952815165197967125756980119533420968413717059059621486339195579699957758172u 0u 0u 1u 2u 0u 0u 14701443190095777811686243040802400733041311233058721930520713618723616718186u 21888242871839275222246405745257275088548364400416034343698204186575808495617u)
+-- Slot 1 opens only after slot 0 of the same poll.
+def closeOneFirst : Flag := acceptedResult (close e (init 0u) 1u 1u 0u 0u 1u 2u 0u 0u 13952815165197967125756980119533420968413717059059621486339195579699957758172u 0u 0u 1u 2u 0u 0u 14701443190095777811686243040802400733041311233058721930520713618723616718186u 0u)
 def afterEntry : State -> Option (Prod State (List Out)) -> State := fun (s : State) (o : Option (Prod State (List Out))) => option s (fun (p : Prod State (List Out)) => first p) o
 def oneDeposit : State := afterEntry (init 0u) (deposit e (init 0u) (first kp0) (second kp0) 10u)
 def partialSeal : Flag := acceptedResult (seal e oneDeposit)
@@ -17,6 +21,18 @@ def again1 : State := afterEntry afterSeal (deposit e afterSeal 5u 6u 10u)
 def again2 : State := afterEntry again1 (deposit e again1 7u 8u 10u)
 def again3 : State := afterEntry again2 (deposit e again2 9u 10u 10u)
 def repeatedRoot : Flag := u256Eq (batchH threeDeposits) (batchH again3)
+-- The first seal sets sealAt to 1 + 60. A seal of the second batch at now 1 is early;
+-- a seal at now 61 is at the bound.
+def e61 : Env := makeEnv 61 0x00000000000000000000000000000000000000aa
+def sealEarly : Flag := acceptedResult (seal e again3)
+def sealAtBound : Flag := acceptedResult (seal e61 again3)
+-- S11: the pool guard of deposit. A deposit of c needs ry of c + 1 or more. poolAt y: a state
+-- with an empty batch and ry = y. (Nine deposits of 100u from init also give ry 100u, but the
+-- eval of that chain of entries is too slow for the twin rows.)
+def poolAt : U256 -> State := fun (y : U256) => makeState 0u mapEmpty mapEmpty mapEmpty mapEmpty 0u mapEmpty mapEmpty mapEmpty
+  1000u y (batchSeed 0u) 0u 0 mapEmpty mapEmpty 0u 0u ringT0 ringT1 ringT2 ringT3 1u 1u
+def depositPoolBound : Flag := acceptedResult (deposit e (poolAt 101u) 39u 40u 100u)
+def depositPoolOut : Flag := acceptedResult (deposit e (poolAt 100u) 39u 40u 100u)
 
 def v0s0c1x : U256 := 0x19d99b0aa847886456ab1542e0892af1cbbdbb0bcf2481d01e2b064296c94303u
 def v0s0c1y : U256 := 0x2fd4eb33f20c6f14a41809b930381868c0f6e935c2a01c90cc60f8cb7c8505e4u
@@ -47,10 +63,13 @@ def ballotSlots : Map U256 U256 := mapSet (mapSet mapEmpty
 def ballotState : Map U256 U256 -> State := fun (o : Map U256 U256) =>
   makeState 0u ballotSlots mapEmpty mapEmpty mapEmpty 0u o mapEmpty mapEmpty 1000u 1000u (batchSeed 0u) 0u 0 mapEmpty mapEmpty 0u 0u ringT0 ringT1 ringT2 ringT3 1u 1u
 
-def ballot : State -> Flag := fun (s : State) => acceptedResult (cast e s 1u ballotWord
+def ballotZ : U256 -> State -> Flag := fun (z : U256) (s : State) => acceptedResult (cast e s 1u ballotWord
   v0s0c1x v0s0c1y v0s0c2x v0s0c2y v0s1c1x v0s1c1y v0s1c2x v0s1c2y
-  v0sumax v0sumay v0sumbx v0sumby v0sumz (sigAt 5) (sigAt 4) (sigAt 3) (sigAt 2) (sigAt 1) (sigAt 0))
+  v0sumax v0sumay v0sumbx v0sumby z (sigAt 5) (sigAt 4) (sigAt 3) (sigAt 2) (sigAt 1) (sigAt 0))
+def ballot : State -> Flag := fun (s : State) => ballotZ v0sumz s
 def castBeforeOpen : Flag := ballot (ballotState mapEmpty)
+-- S11: the sum proof z plus 1. The sum proof check refuses the cast.
+def castBadSum : Flag := ballotZ 0x00d4f66dad9a91f726adb1e172afdd0683dab87bc3b76b7e91f0e71fa82c03f0u (ballotState mapEmpty)
 def castAfterOpen : Flag := ballot (ballotState (mapSet mapEmpty (hash 1u 0u) 1u))
 
 def v0s0a0x : U256 := 0x13d5ce32f3a66b0717dbc06317ce53041ee554534b68c1c4ae78f941dd45faccu
@@ -66,10 +85,13 @@ def v0s0e1 : U256 := 0xe67b1c0ba96362fe32c6a565c757cd324610b9c22f2ff8b8cc70db925
 def v0s0z0 : U256 := 0x296beb8b5d4d77c21aa7409f1b0f16d46b37275d6125f94736e349c1dca743d8u
 def v0s0z1 : U256 := 0x0b9cf21216fde956722450abf43f4313860162ef2b76dc238d643b45b4a7e5e4u
 
-def slotBallot : State -> Flag := fun (s : State) => acceptedResult (castSlot e s 1u 0u
+def slotBallotZ : U256 -> State -> Flag := fun (z : U256) (s : State) => acceptedResult (castSlot e s 1u 0u
   (first (sigImage ballotSig)) (second (sigImage ballotSig)) v0s0c1x v0s0c1y v0s0c2x v0s0c2y
-  v0s0a0x v0s0a0y v0s0b0x v0s0b0y v0s0a1x v0s0a1y v0s0b1x v0s0b1y v0s0e0 v0s0e1 v0s0z0 v0s0z1)
+  v0s0a0x v0s0a0y v0s0b0x v0s0b0y v0s0a1x v0s0a1y v0s0b1x v0s0b1y v0s0e0 v0s0e1 z v0s0z1)
+def slotBallot : State -> Flag := fun (s : State) => slotBallotZ v0s0z0 s
 def slotBeforeOpen : Flag := slotBallot (ballotState mapEmpty)
+-- S11: the slot proof z0 plus 1. The slot proof check refuses the cast.
+def slotBadProof : Flag := slotBallotZ 0x296beb8b5d4d77c21aa7409f1b0f16d46b37275d6125f94736e349c1dca743d9u (ballotState mapEmpty)
 def slotAfterOpen : Flag := slotBallot (ballotState (mapSet mapEmpty (hash 1u 0u) 1u))
 
 def acceptedBatch : State := makeState 1u mapEmpty mapEmpty mapEmpty mapEmpty 0u mapEmpty mapEmpty mapEmpty

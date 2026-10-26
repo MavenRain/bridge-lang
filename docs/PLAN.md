@@ -373,7 +373,7 @@ The ring size bounds the gas of `claim` (O17).
 | S8 | `ZKBridge` as the mapping cylinder; `ZKBridge ≃ BridgeState`; bLSAG claim rings and key images | DONE (2026-10-23), the guest side (Q-S8-1 (a) to Q-S8-4 (a)): examples 47, parse refusals 19, check refusals 175, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 237, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; no src change and no domain change (O38 to O43) |
 | S9 | Part D: encrypted ballots, `tallyEnc`, the tally law, liquidity Decisions, the remote enactment | DONE (2026-10-24), Part D is closed. s1 DONE (2026-10-23), the tally, the tally law and the liquidity Decisions (Q-S9-1 (a), Q-S9-2 (a)): examples 52, parse refusals 19, check refusals 188, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 277, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s1 has no src change and no domain change (O59 to O63). s2 DONE (2026-10-24), the remote enactment and the signed ballot in the kit examples `examples/enact.lang` and `examples/ballot.lang` (Q-S9-3 (a), Q-S9-4 (b)): examples 54, parse refusals 19, check refusals 191, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 314, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s2 has no src change and no domain change (O64 to O68) |
 | S10 | The contract of section 7: writer, two-deployment differential, gas and size rows | DONE (2026-10-26), the contract of section 7 is closed. s1 DONE (2026-10-24), the port of the intent-lang S7 one-hot proof (ef5abe8, Q-S10-1 (a)) and the signed encrypted cast in the kit example `examples/cast.lang` (Q-S10-4 (a), Q-S10-7 (a)): examples 57, parse refusals 19, check refusals 193, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 335, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures, precompile 135 steps; s1 has a src change (`src/front/sigma.c`, `src/front/sigma.h`, the ZK walk skip of `src/front/check.c`) and a domain change (`ZKProof`, `Transcript`, `verified`) (O70 to O74); s2 DONE (2026-10-25), the twin contract `examples/twin.lang` (one bytecode, two deployments, the side value as the `init` argument, Q-S10-2 (a), Q-S10-3 (a), Q-S10-5 (a)) and the kit primitives `u256Mul` and `u256Div` (Q-S10-9 (a)): examples 59, evals 353, rings 7 built 2 refused, runs 8, lower refusals 17, build checks 34, precompile 143 steps, gate 0 failures; s2 has a src change (the `init` argument in `src/lower.c`, `src/evm.c`, `src/evm.h`, `src/asm.h` and `src/front/check.c`; `u256Mul` and `u256Div` in `src/front/core.h`, `src/front/check.c`, `src/front/eval.c` and `src/lower.c`) and a temporary DEVIATION from PLAN 7 (the claim has no ring signature on the EVM, Q-S10-11 (c)) (O75); s3 DONE (2026-10-25), the geth two-deployment differential of `examples/twin.lang` (D4), the gas rows and the contract mutants (Q-S10-8 (a), Q-S10-13 (a), Q-S10-15 (a), Q-S10-16 (a)): evals 355, lower refusals 18, build checks 35, runs 10, diff gate 33 rows, gate 0 failures; s3 has a src change (the entry arity check in `residualize`, `src/lower.c`) (O77); s4 DONE (2026-10-25), the bLSAG slice: one shared unrolled routine `sharedRing` for `cast` and `claim` (the routine path of `src/ir.h`, `src/lower.c` and `src/evm.c`), the open ring fix of Q-S10-10 (a) with the closed key table of Q-S10-17 (b), the claim ring signature on the EVM in the 4 ring map fields of Q-S10-18 (a) (runtime 24166 bytes, 410 free under EIP-170): lower refusals 20, build checks 40, twin rows 14, diff gate 33 rows, gate 0 failures; s4 has a src change (the routine path) and CLOSES the DEVIATION of s2 (O78); s5 DONE (2026-10-25), routine call refusal text fixed and close audit recorded (O79): lower refusals 21, build checks 45, twin rows 14, diff gate 33 rows, gate 0 failures; s6 DONE (2026-10-26), amendment in the twin bytecode (Q-S10-19 (a) to Q-S10-26 (a)): the State fields `poll` and `charter`, the amend `enact` tag 3 with the quota menu of `close`, one live poll and the views `pollOf` and `charterOf` (runtime 24472 bytes, 104 free under EIP-170): lower refusals 21, build checks 45, twin rows 22, diff gate 35 rows, gate 0 failures; s6 has no src change (O80); each exit of PLAN 7 is DONE |
-| S11 | Mutants and close | PLANNED |
+| S11 | Mutants and close | the mutants DONE (2026-10-26), the contract mutant matrix: 29 mutants, 28 KILLED, 1 EQUIVALENT (M-d3); S11 adds 10 guest mutants of `examples/twin.lang`, all KILLED, and 8 twin rows: twin rows 30, lower refusals 21, build checks 45, diff gate 35 rows, gate 0 failures; S11 has no src change and no domain change (O81); the close is OPEN: Q-S7-3, Q-S9-1, Q-S9-2, Q-S9-3 and Q-S9-4 (section 11) have taken answers and wait for the USER ruling |
 
 ## 10. Open items
 
@@ -1333,6 +1333,51 @@ The ring size bounds the gas of `claim` (O17).
     35 rows, gate 0 failures. s6 has no src change. Each exit of PLAN 7
     is DONE (STATUS `S10 close`), thus S10 is DONE. S11 is the mutant
     and project close slice.
+- O81: S11 (2026-10-26), the contract mutant matrix. The base is the
+  USER commit a99d3d8 (S10 s6). The serial baseline
+  (`bridge-lang-work/S11-baseline.log`) exits 0 with the s6 counts.
+  - Method: each guest mutant changes one guard of
+    `examples/twin.lang`. A script applies it, runs `test/twin.sh`,
+    `test/run.sh` and `test/diff.sh`, and restores the file by `cp`.
+    Each restore `cmp` is true, and the last `cmp` against HEAD is 0.
+    Evidence: `bridge-lang-work/s11/matrix.md` and
+    `bridge-lang-work/s11/mutants*.json`.
+  - Matrix: 29 mutants, 28 KILLED, 1 EQUIVALENT. The 19 mutants of
+    O77, O78 and O80 do not change (M-d3 is EQUIVALENT: `slots` has
+    one writer). S11 adds 10 mutants, all KILLED: castReplay (the used
+    key image check to flagYes; `test/diff.sh` and `test/run.sh`),
+    acceptReplay and claimReplay (the replay checks to flagYes; the
+    `test/run.sh` output rows), depositFull (`batchSize` 2u to 3u;
+    twin fourthDeposit), and closeOrder, sealBound, closeDleq12,
+    castSum, castSlot0 and depositPool (new twin rows, below).
+  - New twin rows, because 6 mutants were LIVE before them:
+    closeOneFirst 0 and sealEarly 0 (closeOrder, sealBound),
+    sealAtBound 1 (the seal bound itself), closeBadDleq12 0
+    (closeDleq12: share 12 `dleqOk` to `dleqOkAny`), castBadSum 0
+    (castSum: `sumPf` to `sumPfAny`), slotBadProof 0 (castSlot0: the
+    slot proof check to flagYes), depositPoolBound 1 and
+    depositPoolOut 0 (depositPool: `u256Le (c + 1) (ry s)` to
+    flagYes). Under depositPool, depositPoolOut gives 1, thus this
+    mutant is not EQUIVALENT.
+  - Test helpers: `ballot` and `slotBallot` are eta wrappers of
+    `ballotZ` and `slotBallotZ`, which take the proof z as a
+    parameter. The depositPool rows use `poolAt y` (`makeState`, an
+    empty batch, ry = y). The reachable chain from `init` (nine
+    deposits of 100u and three seals) did not end in `langc eval` in
+    240 s, thus the rows start from the direct state.
+  - A control with the `dleqOkAny` and `sumPfAny` defs and no call
+    change passes `test/twin.sh`, `test/run.sh` and `test/diff.sh`,
+    thus the defs alone change nothing.
+  - Not mutated: `openIs`, the close m bound and the claim index
+    bounds. `openIs` and the accepted hash possibly make them
+    EQUIVALENT. No row shows this.
+  - Counts: twin rows 22 to 30. The other counts are the s6 counts:
+    lower refusals 21, build checks 45, diff gate 35 rows, gate 0
+    failures. S11 changes only `test/twin.lang` and `test/twin.txt`:
+    no src change, no domain change, no size or gas change.
+  - The S11 close is OPEN. The section 11 questions Q-S7-3, Q-S9-1,
+    Q-S9-2, Q-S9-3 and Q-S9-4 have taken answers and no USER ruling.
+    When the USER rules them, S11 is DONE and the plan is CLOSED.
 
 ## 11. Questions for the USER (S1)
 
