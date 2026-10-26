@@ -373,7 +373,7 @@ The ring size bounds the gas of `claim` (O17).
 | S8 | `ZKBridge` as the mapping cylinder; `ZKBridge ≃ BridgeState`; bLSAG claim rings and key images | DONE (2026-10-23), the guest side (Q-S8-1 (a) to Q-S8-4 (a)): examples 47, parse refusals 19, check refusals 175, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 237, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; no src change and no domain change (O38 to O43) |
 | S9 | Part D: encrypted ballots, `tallyEnc`, the tally law, liquidity Decisions, the remote enactment | DONE (2026-10-24), Part D is closed. s1 DONE (2026-10-23), the tally, the tally law and the liquidity Decisions (Q-S9-1 (a), Q-S9-2 (a)): examples 52, parse refusals 19, check refusals 188, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 277, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s1 has no src change and no domain change (O59 to O63). s2 DONE (2026-10-24), the remote enactment and the signed ballot in the kit examples `examples/enact.lang` and `examples/ballot.lang` (Q-S9-3 (a), Q-S9-4 (b)): examples 54, parse refusals 19, check refusals 191, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 314, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures; s2 has no src change and no domain change (O64 to O68) |
 | S10 | The contract of section 7: writer, two-deployment differential, gas and size rows | DONE (2026-10-26), the contract of section 7 is closed. s1 DONE (2026-10-24), the port of the intent-lang S7 one-hot proof (ef5abe8, Q-S10-1 (a)) and the signed encrypted cast in the kit example `examples/cast.lang` (Q-S10-4 (a), Q-S10-7 (a)): examples 57, parse refusals 19, check refusals 193, pool refusals 4, bridge refusals 6, kit-only refusals 22, evals 335, proves 2, contracts 2 written 5 refused, rings 6 built 2 refused, gate 0 failures, precompile 135 steps; s1 has a src change (`src/front/sigma.c`, `src/front/sigma.h`, the ZK walk skip of `src/front/check.c`) and a domain change (`ZKProof`, `Transcript`, `verified`) (O70 to O74); s2 DONE (2026-10-25), the twin contract `examples/twin.lang` (one bytecode, two deployments, the side value as the `init` argument, Q-S10-2 (a), Q-S10-3 (a), Q-S10-5 (a)) and the kit primitives `u256Mul` and `u256Div` (Q-S10-9 (a)): examples 59, evals 353, rings 7 built 2 refused, runs 8, lower refusals 17, build checks 34, precompile 143 steps, gate 0 failures; s2 has a src change (the `init` argument in `src/lower.c`, `src/evm.c`, `src/evm.h`, `src/asm.h` and `src/front/check.c`; `u256Mul` and `u256Div` in `src/front/core.h`, `src/front/check.c`, `src/front/eval.c` and `src/lower.c`) and a temporary DEVIATION from PLAN 7 (the claim has no ring signature on the EVM, Q-S10-11 (c)) (O75); s3 DONE (2026-10-25), the geth two-deployment differential of `examples/twin.lang` (D4), the gas rows and the contract mutants (Q-S10-8 (a), Q-S10-13 (a), Q-S10-15 (a), Q-S10-16 (a)): evals 355, lower refusals 18, build checks 35, runs 10, diff gate 33 rows, gate 0 failures; s3 has a src change (the entry arity check in `residualize`, `src/lower.c`) (O77); s4 DONE (2026-10-25), the bLSAG slice: one shared unrolled routine `sharedRing` for `cast` and `claim` (the routine path of `src/ir.h`, `src/lower.c` and `src/evm.c`), the open ring fix of Q-S10-10 (a) with the closed key table of Q-S10-17 (b), the claim ring signature on the EVM in the 4 ring map fields of Q-S10-18 (a) (runtime 24166 bytes, 410 free under EIP-170): lower refusals 20, build checks 40, twin rows 14, diff gate 33 rows, gate 0 failures; s4 has a src change (the routine path) and CLOSES the DEVIATION of s2 (O78); s5 DONE (2026-10-25), routine call refusal text fixed and close audit recorded (O79): lower refusals 21, build checks 45, twin rows 14, diff gate 33 rows, gate 0 failures; s6 DONE (2026-10-26), amendment in the twin bytecode (Q-S10-19 (a) to Q-S10-26 (a)): the State fields `poll` and `charter`, the amend `enact` tag 3 with the quota menu of `close`, one live poll and the views `pollOf` and `charterOf` (runtime 24472 bytes, 104 free under EIP-170): lower refusals 21, build checks 45, twin rows 22, diff gate 35 rows, gate 0 failures; s6 has no src change (O80); each exit of PLAN 7 is DONE |
-| S11 | Mutants and close | the mutants DONE (2026-10-26), the contract mutant matrix: 29 mutants, 28 KILLED, 1 EQUIVALENT (M-d3); S11 adds 10 guest mutants of `examples/twin.lang`, all KILLED, and 8 twin rows: twin rows 30, lower refusals 21, build checks 45, diff gate 35 rows, gate 0 failures; S11 has no src change and no domain change (O81); the close is OPEN: Q-S7-3, Q-S9-1, Q-S9-2, Q-S9-3 and Q-S9-4 (section 11) have taken answers and wait for the USER ruling |
+| S11 | Mutants and close | DONE (2026-10-26), the plan is CLOSED. The mutants DONE (2026-10-26), the contract mutant matrix: 29 mutants, 28 KILLED, 1 EQUIVALENT (M-d3); S11 adds 10 guest mutants of `examples/twin.lang`, all KILLED, and 8 twin rows: twin rows 30, lower refusals 21, build checks 45, diff gate 35 rows, gate 0 failures; S11 has no src change and no domain change (O81); the close DONE (2026-10-26): the USER RULED Q-S7-3 (a), Q-S9-1 (a), Q-S9-2 (a), Q-S9-3 (a) and Q-S9-4 (b) (section 11), no question is OPEN, the plan is CLOSED (O82) |
 
 ## 10. Open items
 
@@ -1378,6 +1378,20 @@ The ring size bounds the gas of `claim` (O17).
   - The S11 close is OPEN. The section 11 questions Q-S7-3, Q-S9-1,
     Q-S9-2, Q-S9-3 and Q-S9-4 have taken answers and no USER ruling.
     When the USER rules them, S11 is DONE and the plan is CLOSED.
+- O82: S11 close (2026-10-26), the USER rulings and the plan close. The
+  base is the USER commit 9eebfae (S11 mutants, tree 7c8e2e4d).
+  - The USER RULED the five section 11 questions with the taken
+    answers: Q-S7-3 (a), Q-S9-1 (a), Q-S9-2 (a), Q-S9-3 (a) and Q-S9-4
+    (b). No ruling is different from the taken answer, thus no slice
+    is added. No question in section 11 is OPEN.
+  - S11 is DONE and the plan is CLOSED.
+  - The close changes only `docs/PLAN.md` and `docs/STATUS.md`: no src
+    change, no domain change and no test change. The serial final gate
+    (`bridge-lang-work/S11-close-final-gate.log`) exits 0 with the S11
+    counts: twin rows 30, lower refusals 21, build checks 45, diff gate
+    35 rows, gate 0 failures.
+  - Remaining limits (STATUS `S11 close`): ring size 3 only; `openIs`,
+    the close m bound and the claim index bounds are not mutated.
 
 ## 11. Questions for the USER (S1)
 
@@ -1605,7 +1619,7 @@ Q-S4-1 (a), Q-S4-3 (a) and Q-S4-4 (a) are taken. The USER RULED all
 four S4 questions (a) (2026-10-23, O51). Q-S4-2 (a) makes S7 s2 (the
 port of intent-lang 1b65dec) the next slice. No question is OPEN.
 
-### S7 s2 questions (OPEN)
+### S7 s2 questions (RULED)
 
 - Q-S7-3 (the guest `open` after the port). The sealed `Enc` makes the
   S7 s1 guest `open`, `openLaw`, `decEta` and `openAt` law-only, and
@@ -1620,11 +1634,11 @@ port of intent-lang 1b65dec) the next slice. No question is OPEN.
   intent-lang S6 now and remove the local `Quorum` and `open` (a domain
   change before the S6 port). (c) the guest `open` returns `Trunc1 A`
   (`observe`), and `openLaw` is a Path in `Trunc1 A`. This changes the
-  meaning of `open`.
+  meaning of `open`. RULED: (a) (USER, 2026-10-26).
 
-Q-S7-3 (a) is taken. Q-S7-3 waits for the USER ruling.
+Q-S7-3 (a) is taken. The USER RULED Q-S7-3 (a) (2026-10-26, O82).
 
-### S9 questions (OPEN)
+### S9 questions (RULED)
 
 - Q-S9-1 (the ballot signature). The domain `Ballot_priv` is
   `castPrivate m c` over a plain Choice (`zk_source`). An encrypted
@@ -1632,25 +1646,29 @@ Q-S7-3 (a) is taken. Q-S7-3 waits for the USER ruling.
   encrypted ballot as a guest `Enc Votes`, and s2 pairs it with the S8
   ring signature in the kit (no src change). RECOMMENDED, taken (O60).
   (b) a domain `Ballot_enc` with an `Enc` payload in `zk_source` (a src
-  change before S10).
+  change before S10). RULED: (a) (USER, 2026-10-26).
 - Q-S9-2 (the S9 split). (a) s1 is the tally, the tally law and the
   liquidity Decisions; s2 is the remote enactment and the signed
-  ballot. RECOMMENDED, taken (O60). (b) one slice.
+  ballot. RECOMMENDED, taken (O60). (b) one slice. RULED: (a)
+  (USER, 2026-10-26).
 
-Q-S9-1 (a) and Q-S9-2 (a) are taken. They wait for the USER ruling.
+Q-S9-1 (a) and Q-S9-2 (a) are taken. The USER RULED both (a)
+(2026-10-26, O82).
 
-### S9 s2 questions (OPEN)
+### S9 s2 questions (RULED)
 
 - Q-S9-3 (the ballot word). (a) the ring signature signs a ciphertext
   word w, an input in s2; the S10 `cast` hashes the stored ElGamal
   ciphertext. RECOMMENDED, taken (O65). (b) a kit `encWord : Enc Votes
   -> U256` (a sealed eliminator into words; it is law-only).
+  RULED: (a) (USER, 2026-10-26).
 - Q-S9-4 (the host tally row). (a) add it in s2 (`test/elgamaltool.c`).
   (b) defer it to S10 with the one-hot proof. Taken (O68), because s2
   did not build the host row. (a) is still possible: S10 can add the
-  row first.
+  row first. RULED: (b) (USER, 2026-10-26).
 
-Q-S9-3 (a) and Q-S9-4 (b) are taken. They wait for the USER ruling.
+Q-S9-3 (a) and Q-S9-4 (b) are taken. The USER RULED Q-S9-3 (a) and
+Q-S9-4 (b) (2026-10-26, O82). No question in this section is OPEN.
 
 ### S10 questions (RULED)
 

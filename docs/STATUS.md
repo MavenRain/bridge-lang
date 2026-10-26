@@ -1297,3 +1297,36 @@ Remaining limits:
 Open: the S11 close. The PLAN section 11 questions Q-S7-3, Q-S9-1,
 Q-S9-2, Q-S9-3 and Q-S9-4 have taken answers and wait for the USER
 ruling. When the USER rules them, S11 is DONE and the plan is CLOSED.
+
+## S11 close
+
+The S11 close is DONE (2026-10-26). The base is the USER commit
+9eebfae (S11 mutants). The serial final gate
+(`bridge-lang-work/S11-close-final-gate.log`) exits 0 with the S11
+counts.
+
+The USER RULED the five open PLAN section 11 questions with the taken
+answers (PLAN O82):
+
+| Question | Subject | Ruling |
+|---|---|---|
+| Q-S7-3 | the guest `open` after the port | (a) the kit example `examples/enc-ideal.lang` |
+| Q-S9-1 | the ballot signature | (a) a guest `Enc Votes` with the S8 ring signature in the kit |
+| Q-S9-2 | the S9 split | (a) s1 the tally, s2 the remote enactment and the signed ballot |
+| Q-S9-3 | the ballot word | (a) the ring signature signs a ciphertext word |
+| Q-S9-4 | the host tally row | (b) S10, with the one-hot proof |
+
+No question is OPEN. S11 is DONE and the plan is CLOSED.
+
+The close changes only `docs/PLAN.md` and `docs/STATUS.md`. There is
+no src change, no domain change and no test change. The counts are
+the S11 counts: twin rows 30, lower refusals 21, build checks 45, diff
+gate 35 rows, gate 0 failures.
+
+Remaining limits (from `## S11`):
+
+- The only supported ring size is 3. Larger rings or a variable ring
+  ABI need a USER scope ruling, a size check and new gas rows.
+- Not mutated: `openIs`, the close m bound and the claim index bounds.
+  `openIs` and the accepted hash possibly make them EQUIVALENT. No row
+  shows this.
