@@ -16,3 +16,5 @@ orbit-word.lang REFUSE_LOWER
 glue-word.lang REFUSE_LOWER
 init-two-args.lang REFUSE_LOWER
 arity33.lang EVM_ARITY
+shared-shape.lang REFUSE_LOWER
+shared-arg.lang REFUSE_LOWER

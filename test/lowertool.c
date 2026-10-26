@@ -44,7 +44,7 @@ static int regression(const char *name, const char *defs, size_t functions,
   Diag diag;
   DeclList decls;
   Machine machine;
-  IrProgram program = {NULL, 0};
+  IrProgram program = {NULL, 0, NULL, 0};
   int ok;
   snprintf(source, sizeof source, "%s%s", prefix, defs);
   arena_init(&arena, (size_t)1 << 25);
@@ -102,7 +102,7 @@ static int order_regression(const char *name, const char *defs, int local_cond) 
   Diag diag;
   DeclList decls;
   Machine machine;
-  IrProgram program = {NULL, 0};
+  IrProgram program = {NULL, 0, NULL, 0};
   int ok;
   snprintf(source, sizeof source, "%s%s", prefix, defs);
   arena_init(&arena, (size_t)1 << 25);

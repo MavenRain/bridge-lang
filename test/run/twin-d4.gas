@@ -3,9 +3,9 @@
 -- evm 1.14.12, `evm run --statdump`, no intrinsic gas). A gas above its
 -- bound is a FAIL row.
 accept 38054
-cast 372761
+cast 403491
 castSlot 82143
-claim 76543
+claim 189658
 close 145009
 decidedOf 2533
 deposit 120328

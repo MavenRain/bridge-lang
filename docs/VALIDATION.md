@@ -442,3 +442,33 @@ deposit costs 71253 more than each later deposit. Under the DEVIATION
 (Q-S10-11 (c)) the EVM `claim` has no ring signature, thus no ring size
 bounds its gas yet (O17). S10 s4 adds the ring signature to the claim and
 takes a new bound for `claim` from its first run.
+
+## The size of the twin contract (S10 s4)
+
+langc gives no size past EIP-170, thus a differential build measures
+each form: remove `enact` and `close` from each copy; true = 23900 +
+(E - 16104). The direct build of B2c (24166) equals the differential
+value. The forms are in s10s4/step3/ of the work directory.
+
+| Form | bytes | vs EIP-170 (24576) |
+|---|---|---|
+| resume 5 (the cast through `sharedRing`) | 23900 | 676 free |
+| (b2) as DESIGN: 1 map `ring`, key `hash i j`, claimed by (I, batch hash) | 25649 | over 1073 |
+| B2a: (b2) plus claimed by (I, n) | 24913 | over 337 |
+| B2ax: B2a with no claim ring call | 24783 | over 207 |
+| B2d: 4 map fields keyed by i, claimed by (I, batch hash) | 24716 | over 140 |
+| B2c: 4 map fields keyed by i, claimed by (I, n) (Q-S10-18 (a)) | 24166 (direct) | 410 free |
+
+One `mapGet (ring s) (hash i j)` read is about 73 bytes; a map field
+keyed by i removes the inner KECCAK. The claim ring call is 130 bytes.
+The S10 s3 table above is history.
+
+## The gas of the twin contract (S10 s4)
+
+The bounds come from the first run of `test/diff.sh` (O17). The cast
+steps cost 2604, 126227, 229855, 229855 and 403491: the bound `cast
+403491` is 30730 more than in S10 s3 (372761), through the 4 ring map
+fields. The claim steps cost 18817 and 189658: the bound `claim 189658`
+replaces 76543, because the claim now checks the ring signature. The
+gas rows measure the `twin-d4` scripts only, thus row 11 of
+`test/run/twin-remote.script` is not in them.

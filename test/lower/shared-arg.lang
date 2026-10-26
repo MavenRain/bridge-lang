@@ -1,0 +1,10 @@
+-- REFUSE_LOWER (S10 s4): the words of a shared routine call are strict at the
+-- call. u256Add can trap (overflow), thus the call of sharedMix is refused.
+state State := makeState (count : U256)
+def init : State := makeState 0u
+
+def sharedMix : (env : Env) -> (s : State) -> (a b : U256) -> U256 :=
+  fun (env : Env) (s : State) (a b : U256) => hash a b
+
+def mix : (env : Env) -> (s : State) -> (a b : U256) -> U256 :=
+  fun (env : Env) (s : State) (a b : U256) => sharedMix env s (u256Add a b) b

@@ -125,6 +125,18 @@ case $(head -n 1 "$tmp/err") in
   *) expect 'stdout write code' IO_WRITE "$(head -n 1 "$tmp/err")" ;;
 esac
 
+# A shared routine (S10 s4, test/lower/shared-call.lang): the runtime has one
+# body of sharedMix, and the views viewA and viewB each call it (PUSH2 0x00a9,
+# JUMP; the count reads the hex at byte boundaries only). Each view returns the
+# word of hash (hash a b) (count s); count is 0 in the empty storage of `evm run`.
+shared=test/lower/shared-call.lang
+rt=$(build/langc --kit build "$shared" --runtime)
+expect 'shared calls' 2 "$(printf '%s' "$rt" | awk '{ n = 0; for (i = 1; i + 7 <= length($0); i += 2) if (substr($0, i, 8) == "6100a956") n++; print n }')"
+h=$(keccak "$(pad 5)$(pad 1)")
+h=$(keccak "$h$(pad 0)")
+expect 'shared viewA' "0x$h" "$(evm run --code "$rt" --input "$(input "$shared" viewA 5u)" 2>&1 | head -n 1)"
+expect 'shared viewB' "0x$(keccak "$h$(pad 2)")" "$(evm run --code "$rt" --input "$(input "$shared" viewB 1u 5u)" 2>&1 | head -n 1)"
+
 rm -rf "$tmp"
 echo "builds: $builds checked, lower refusals: $refused checked, checks: $checks"
 echo "build gate: $fail failures"

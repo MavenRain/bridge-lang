@@ -103,10 +103,13 @@ typedef enum {
                      data = the field_count words of fields */
   IR_STMT_CALL,   /* EVM CALL to the token word expr (C-K4-14, C-K4d-6): the
                      selector of name(types), then the field_count words of fields */
-  IR_STMT_PRECOMPILE /* sealed-lang S2: local := address of a new block of out_count
+  IR_STMT_PRECOMPILE, /* sealed-lang S2: local := address of a new block of out_count
                         words; EVM STATICCALL to the precompile address with the
                         field_count words of fields as input; the output words fill
                         the block, which is 0 first; a failure reverts */
+  IR_STMT_ROUTINE /* bridge-lang S10 s4: local := the result of routine number
+                     address; its params 0 to field_count - 1 := fields; it can
+                     trap or revert as its body does */
 } IrStmtKind;
 
 struct IrStmt {
@@ -123,7 +126,7 @@ struct IrStmt {
   size_t arm_count;
   const char *name;      /* IR_STMT_LOG: the event name; IR_STMT_CALL: the function name */
   const IrScalar *types; /* IR_STMT_LOG and IR_STMT_CALL: the type of each field */
-  uint32_t address;      /* IR_STMT_PRECOMPILE: the precompile address (1, 6, 7 or 8) */
+  uint32_t address;      /* IR_STMT_PRECOMPILE: the precompile address (1, 6, 7 or 8); IR_STMT_ROUTINE: the routine number */
   size_t out_count;      /* IR_STMT_PRECOMPILE: the words of the output block */
 };
 
@@ -138,9 +141,22 @@ typedef struct {
   IrBlock body;
 } IrFunc;
 
+/* A shared routine (bridge-lang S10 s4). The params are locals 0 to
+   param_count - 1 of its own frame. The body has no RETURN and no STOP, and
+   it sets local result. */
+typedef struct {
+  const char *name;
+  size_t param_count;
+  uint32_t local_count; /* includes the parameters */
+  uint32_t result;
+  IrBlock body;
+} IrRoutine;
+
 typedef struct {
   const IrFunc *funcs;
   size_t func_count;
+  const IrRoutine *routines; /* S10 s4 */
+  size_t routine_count;
 } IrProgram;
 
 #endif

@@ -5,11 +5,11 @@ def acceptedResult : Option (Prod State (List Out)) -> Flag := fun (o : Option (
 def closeZero : Flag := acceptedResult (close e (init 0u) 1u 0u 0u 0u 1u 2u 0u 0u 13952815165197967125756980119533420968413717059059621486339195579699957758172u 0u 0u 1u 2u 0u 0u 14701443190095777811686243040802400733041311233058721930520713618723616718186u 0u)
 def closeAlias : Flag := acceptedResult (close e (init 0u) 1u 0u 0u 0u 1u 2u 0u 0u 13952815165197967125756980119533420968413717059059621486339195579699957758172u 0u 0u 1u 2u 0u 0u 14701443190095777811686243040802400733041311233058721930520713618723616718186u 21888242871839275222246405745257275088548364400416034343698204186575808495617u)
 def afterEntry : State -> Option (Prod State (List Out)) -> State := fun (s : State) (o : Option (Prod State (List Out))) => option s (fun (p : Prod State (List Out)) => first p) o
-def oneDeposit : State := afterEntry (init 0u) (deposit e (init 0u) 5u 6u 10u)
+def oneDeposit : State := afterEntry (init 0u) (deposit e (init 0u) (first kp0) (second kp0) 10u)
 def partialSeal : Flag := acceptedResult (seal e oneDeposit)
 def mixedDeposit : Flag := acceptedResult (deposit e oneDeposit 7u 8u 100u)
-def twoDeposits : State := afterEntry oneDeposit (deposit e oneDeposit 7u 8u 10u)
-def threeDeposits : State := afterEntry twoDeposits (deposit e twoDeposits 9u 10u 10u)
+def twoDeposits : State := afterEntry oneDeposit (deposit e oneDeposit (first kp1) (second kp1) 10u)
+def threeDeposits : State := afterEntry twoDeposits (deposit e twoDeposits (first kp2) (second kp2) 10u)
 def fullSeal : Flag := acceptedResult (seal e threeDeposits)
 def fourthDeposit : Flag := acceptedResult (deposit e threeDeposits 11u 12u 10u)
 def afterSeal : State := afterEntry threeDeposits (seal e threeDeposits)
@@ -45,7 +45,7 @@ def ballotSlots : Map U256 U256 := mapSet (mapSet mapEmpty
   (hash (ctxOf (sigImage ballotSig) 1u) 0u) (hash (hash (hash v0s0c1x v0s0c1y) v0s0c2x) v0s0c2y))
   (hash (ctxOf (sigImage ballotSig) 1u) 1u) (hash (hash (hash v0s1c1x v0s1c1y) v0s1c2x) v0s1c2y)
 def ballotState : Map U256 U256 -> State := fun (o : Map U256 U256) =>
-  makeState 0u ballotSlots mapEmpty mapEmpty mapEmpty 0u o mapEmpty mapEmpty 1000u 1000u (batchSeed 0u) 0u 0 mapEmpty mapEmpty 0u 0u
+  makeState 0u ballotSlots mapEmpty mapEmpty mapEmpty 0u o mapEmpty mapEmpty 1000u 1000u (batchSeed 0u) 0u 0 mapEmpty mapEmpty 0u 0u ringT0 ringT1 ringT2 ringT3
 
 def ballot : State -> Flag := fun (s : State) => acceptedResult (cast e s 1u ballotWord
   v0s0c1x v0s0c1y v0s0c2x v0s0c2y v0s1c1x v0s1c1y v0s1c2x v0s1c2y
@@ -73,6 +73,18 @@ def slotBeforeOpen : Flag := slotBallot (ballotState mapEmpty)
 def slotAfterOpen : Flag := slotBallot (ballotState (mapSet mapEmpty (hash 1u 0u) 1u))
 
 def acceptedBatch : State := makeState 1u mapEmpty mapEmpty mapEmpty mapEmpty 0u mapEmpty mapEmpty mapEmpty
-  1000u 1000u (batchSeed 0u) 0u 0 (mapSet mapEmpty (batchH threeDeposits) flagYes) mapEmpty 0u 0u
-def claimBatchZero : Flag := acceptedResult (claim e acceptedBatch 0u 10u 5u 6u 7u 8u 9u 10u 3u 4u)
-def claimBatchOne : Flag := acceptedResult (claim e acceptedBatch 1u 10u 5u 6u 7u 8u 9u 10u 3u 4u)
+  1000u 1000u (batchSeed 0u) 0u 0 (mapSet mapEmpty (batchH threeDeposits) flagYes) mapEmpty 0u 0u ringT0 ringT1 ringT2 ringT3
+-- A claim of 10u from batch n with the ring signature of key 0 over poll (hash claimTag n), at
+-- eval time (Q-S10-18 (a)). claimBadSig: the words of that signature with the key image of key 1
+-- (a point on BN254, thus the ring check refuses it). fold is a right fold: claimSigWord l k is
+-- the word k from the end of l, thus c s1 s2 s3 ix iy = claimSigWord l 5, 4, 3, 2, 1, 0.
+def claimSig : U256 -> List U256 := fun (n : U256) => zkSign voters (zkKey 0) (hash claimTag n) 10u
+def claimSigWord : List U256 -> Nat -> U256 := fun (l : List U256) (k : Nat) => second (fold
+  (fun (w : U256) (r : Prod Nat U256) => pair (natAdd (first r) 1) (flagIf (natEq (first r) k) w (second r)))
+  (pair 0 0u) l)
+def claimWith : U256 -> List U256 -> U256 -> U256 -> Flag := fun (n : U256) (g : List U256) (w4 w5 : U256) =>
+  acceptedResult (claim e acceptedBatch n 10u 0u 1u 2u (claimSigWord g 5) (claimSigWord g 4) (claimSigWord g 3) (claimSigWord g 2) w4 w5)
+def claimBatchZero : Flag := claimWith 0u (claimSig 0u) (claimSigWord (claimSig 0u) 1) (claimSigWord (claimSig 0u) 0)
+def claimBatchOne : Flag := claimWith 1u (claimSig 1u) (claimSigWord (claimSig 1u) 1) (claimSigWord (claimSig 1u) 0)
+def claimKeyOne : List U256 := zkSign voters (zkKey 1) (hash claimTag 0u) 10u
+def claimBadSig : Flag := claimWith 0u (claimSig 0u) (claimSigWord claimKeyOne 1) (claimSigWord claimKeyOne 0)

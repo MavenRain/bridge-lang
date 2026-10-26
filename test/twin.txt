@@ -11,3 +11,4 @@ slotBeforeOpen 1
 slotAfterOpen 0
 claimBatchZero 1
 claimBatchOne 0
+claimBadSig 0

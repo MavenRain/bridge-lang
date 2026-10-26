@@ -203,6 +203,16 @@ static uint32_t family_named(const Machine *m, const char *name) {
   return found;
 }
 
+/* A shared routine (S10 s4): a def named shared plus an uppercase letter,
+   with the view shape. It is lowered once, and each entry calls it. Shared
+   def k is the variable ROUTINE_LEVEL + k while the entries are lowered. */
+#define ROUTINE_LEVEL 0x40000000u
+#define ROUTINES_MAX 8u
+
+static int is_shared(const char *name) {
+  return strncmp(name, "shared", 6) == 0 && name[6] >= 'A' && name[6] <= 'Z';
+}
+
 static int is_family_value(const Value *t, uint32_t family) {
   return t != NULL && val_is(t, OP_FAMILY) && t->inst == family;
 }
@@ -281,6 +291,8 @@ typedef struct {
   CurveMemo *memo;
   size_t memo_count;
   size_t memo_cap;
+  const IrRoutine *routines; /* S10 s4: the shared routines that an entry calls */
+  size_t routine_count;
 } Low;
 
 static void *low_alloc(Low *l, size_t size) {
@@ -486,7 +498,7 @@ static int block_may_trap(IrBlock b) {
   for (size_t i = 0; i < b.count; i++) {
     const IrStmt *s = b.items[i];
     /* A failed STATICCALL reverts, even when its input words cannot trap. */
-    if (s->kind == IR_STMT_TRAP || s->kind == IR_STMT_PRECOMPILE ||
+    if (s->kind == IR_STMT_TRAP || s->kind == IR_STMT_PRECOMPILE || s->kind == IR_STMT_ROUTINE ||
         expr_may_trap(s->expr) || expr_may_trap(s->value) || fields_may_trap(s) ||
         block_may_trap(s->body) || block_may_trap(s->otherwise)) return 1;
   }
@@ -625,6 +637,44 @@ static const IrExpr *lower_curve(Low *l, Stmts *b, const Value *v) {
   return push(l, b, s) && memo_add(l, v, s, s->local) ? ir_local(l, s->local) : NULL;
 }
 
+/* An application of shared def k (S10 s4): the variable ROUTINE_LEVEL + k
+   applied to the Env and the state of the entry (levels 0 and 1), then one
+   word for each param. The words are strict at the call, thus a word that
+   can trap or revert gives REFUSE_LOWER. One call per value per entry, as
+   lower_curve. */
+static const IrExpr *lower_routine_call(Low *l, Stmts *b, const Value *v) {
+  const Value *args[ENTRY_PARAMS_MAX + 2u];
+  size_t argc = 0;
+  const Value *head = v;
+  for (; head != NULL && head->kind == VAL_APP && argc < ENTRY_PARAMS_MAX + 2u; head = head->dom) args[argc++] = head->arg;
+  uint32_t k = head != NULL && head->kind == VAL_VAR && head->nat >= ROUTINE_LEVEL
+               ? (uint32_t)(head->nat - ROUTINE_LEVEL) : UINT32_MAX;
+  if (k >= l->routine_count) return refuse(l, v, "at a word position"), NULL;
+  const IrRoutine *r = &l->routines[k];
+  const Value *env = argc == r->param_count + 2u ? args[argc - 1u] : NULL;
+  const Value *pre = env != NULL ? args[argc - 2u] : NULL;
+  if (env == NULL || env->kind != VAL_VAR || env->nat != 0u || pre->kind != VAL_VAR || pre->nat != 1u)
+    return refuse(l, v, "as a shared routine call (want the Env and the state of the entry, then a word for each param)"), NULL;
+  for (size_t i = 0; i < l->memo_count; i++)
+    if (l->memo[i].value == v && block_has(b, l->memo[i].stmt)) return ir_local(l, l->memo[i].local);
+  const IrExpr **fields = r->param_count > 0 ? low_alloc(l, r->param_count * sizeof *fields) : NULL;
+  IrStmt *s = r->param_count == 0 || fields != NULL ? new_stmt(l, IR_STMT_ROUTINE) : NULL;
+  size_t before = b->count;
+  for (size_t i = 0; s != NULL && i < r->param_count; i++) {
+    fields[i] = lower_expr(l, b, args[r->param_count - 1u - i]);
+    if (fields[i] == NULL) s = NULL;
+  }
+  if (s == NULL) return NULL;
+  s->fields = fields;
+  s->field_count = r->param_count;
+  IrBlock pushed = {b->count > before ? (const IrStmt *const *)b->items + before : NULL, b->count - before};
+  if (fields_may_trap(s) || block_may_trap(pushed))
+    return refuse(l, v, "as a shared routine call (a word that can trap or revert: the words are strict at the call)"), NULL;
+  s->local = l->locals++;
+  s->address = k;
+  return push(l, b, s) && memo_add(l, v, s, s->local) ? ir_local(l, s->local) : NULL;
+}
+
 static const IrExpr *lower_expr(Low *l, Stmts *b, const Value *v) {
   uint32_t f;
   if (v != NULL && v->kind == VAL_TRAP) return push(l, b, new_stmt(l, IR_STMT_TRAP)) ? ir_const(l, 0) : NULL;
@@ -637,7 +687,8 @@ static const IrExpr *lower_expr(Low *l, Stmts *b, const Value *v) {
     e->word = w;
     return e;
   }
-  if (v != NULL && v->kind == VAL_VAR && v->nat >= 2u) return ir_local(l, (uint32_t)v->nat - 2u);
+  if (v != NULL && v->kind == VAL_APP) return lower_routine_call(l, b, v);
+  if (v != NULL && v->kind == VAL_VAR && v->nat >= 2u && v->nat < ROUTINE_LEVEL) return ir_local(l, (uint32_t)v->nat - 2u);
   if (field_of(v, 1u, &f) && form_at(l, f) == FORM_WORD) return ir_sload(l, ir_const(l, f));
   if (field_of(v, 0u, &f) && l->env != NULL && f < l->env->field_count) {
     const char *name = l->env->fields[f].name;
@@ -911,28 +962,68 @@ static IrScalar scalar_of(const Value *t) {
 static int lower_entries(Machine *m, const CtorInfo *ci, IrProgram *program, const char **kinds) {
   uint32_t env = family_named(m, "Env");
   uint32_t out = family_named(m, "Out");
+  const CtorInfo *env_ci = env < m->family_count ? &m->ctors[m->families[env].first_ctor] : NULL;
   IrFunc *funcs = m->def_count > 0 ? arena_alloc(m->arena, m->def_count * sizeof *funcs) : NULL;
-  size_t n = 0;
-  if (m->def_count > 0 && funcs == NULL) return diag_fail(m->diag, "OOM", NULL, "out of memory");
+  const Value **saved = m->def_count > 0 ? arena_alloc(m->arena, m->def_count * sizeof *saved) : NULL;
+  IrRoutine *routines = arena_alloc(m->arena, ROUTINES_MAX * sizeof *routines);
+  uint32_t shared[ROUTINES_MAX];
+  size_t n = 0, nr = 0;
+  int ok = 1;
+  if ((m->def_count > 0 && (funcs == NULL || saved == NULL)) || routines == NULL)
+    return diag_fail(m->diag, "OOM", NULL, "out of memory");
+  /* S10 s4 phase 1: each shared def once, with the real def values. */
   for (uint32_t i = 0; i < m->def_count; i++) {
+    if (!is_shared(m->defs[i].name)) continue;
     Residual r;
     int role = residualize(m, env, out, i, &r);
     if (role < 0) return 0;
-    if (role == 0) continue;
-    Low l = {m, ci, env < m->family_count ? &m->ctors[m->families[env].first_ctor] : NULL, r.arg_count, m->defs[i].name, NULL, 0, 0};
+    if (role != 2 || nr == ROUTINES_MAX)
+      return diag_fail(m->diag, "REFUSE_LOWER", m->defs[i].name,
+                       "a shared routine has the shape (env : Env) -> (s : State) -> words -> word, at most %u of them",
+                       ROUTINES_MAX);
+    Low l = {m, ci, env_ci, r.arg_count, m->defs[i].name, NULL, 0, 0, NULL, 0};
+    Stmts b = {NULL, 0, 0, NULL};
+    const IrExpr *x = lower_expr(&l, &b, r.body);
+    uint32_t res = l.locals++;
+    if (!push_set(&l, &b, res, x)) return 0;
+    IrRoutine routine = {m->defs[i].name, r.arg_count, l.locals, res, block_of(&b)};
+    shared[nr] = i;
+    routines[nr++] = routine;
+  }
+  /* Phase 2: shared def k is the variable ROUTINE_LEVEL + k, thus each entry
+     body holds an application of it, not its inlined body. */
+  for (uint32_t d = 0; nr > 0 && d < m->def_count; d++) {
+    saved[d] = m->defs[d].value;
+    m->defs[d].value = NULL;
+  }
+  for (size_t k = 0; k < nr; k++) m->defs[shared[k]].value = val_var(m, ROUTINE_LEVEL + (uint32_t)k);
+  for (uint32_t i = 0; ok && i < m->def_count; i++) {
+    if (is_shared(m->defs[i].name)) continue;
+    Residual r;
+    int role = residualize(m, env, out, i, &r);
+    if (role < 0) ok = 0;
+    if (role <= 0) continue;
+    Low l = {m, ci, env_ci, r.arg_count, m->defs[i].name, NULL, 0, 0, routines, nr};
     Stmts b = {NULL, 0, 0, NULL};
     IrScalar *params = r.arg_count > 0 ? low_alloc(&l, r.arg_count * sizeof *params) : NULL;
     if ((r.arg_count > 0 && params == NULL)
-        || !(role == 2 ? lower_view(&l, &b, r.body) : lower_result(&l, &b, r.body)))
-      return 0;
+        || !(role == 2 ? lower_view(&l, &b, r.body) : lower_result(&l, &b, r.body))) {
+      ok = 0;
+      continue;
+    }
     for (uint32_t k = 0; k < r.arg_count; k++) params[k] = scalar_of(r.arg_types[k]);
     IrScalar result = role == 2 ? scalar_of(r.result) : IR_SCALAR_NAT;
     IrFunc func = {m->defs[i].name, params, r.arg_count, result, l.locals, block_of(&b)};
     if (kinds != NULL) kinds[n] = role == 2 ? "view" : "entry";
     funcs[n++] = func;
   }
+  /* Phase 3: the real def values again, on each path. */
+  for (uint32_t d = 0; nr > 0 && d < m->def_count; d++) m->defs[d].value = saved[d];
+  if (!ok) return 0;
   program->funcs = funcs;
   program->func_count = n;
+  program->routines = routines;
+  program->routine_count = nr;
   return 1;
 }
 
@@ -1021,7 +1112,7 @@ static EvmBuild abi_json_item(FILE *out, size_t index, const char *kind, const c
    Validate the full creation code before writing any output. */
 int lower_abi(Machine *m, FILE *out, int json) {
   const char **kinds = m->def_count > 0 ? arena_alloc(m->arena, m->def_count * sizeof *kinds) : NULL;
-  IrProgram program = {NULL, 0};
+  IrProgram program = {NULL, 0, NULL, 0};
   Pairs pairs = {NULL, 0, 0, {0}};
   if (m->def_count > 0 && kinds == NULL) return build_status(m, EVM_BUILD_OOM);
   int refused = lower_contract(m, &program, kinds, &pairs);
@@ -1051,7 +1142,7 @@ int lower_abi(Machine *m, FILE *out, int json) {
 }
 
 int lower_build(Machine *m, TargetPart part, FILE *out) {
-  IrProgram program = {NULL, 0};
+  IrProgram program = {NULL, 0, NULL, 0};
   Pairs pairs = {NULL, 0, 0, {0}};
   int refused = lower_contract(m, &program, NULL, &pairs);
   if (refused != 0) return refused;

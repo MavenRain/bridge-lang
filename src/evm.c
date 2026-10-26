@@ -139,6 +139,10 @@ typedef struct {
   Label revert;
   Label trap;
   EvmBuild failure;
+  uint64_t frame;         /* S10 s4: the first local word; 0 in an entry */
+  uint64_t routine_frame; /* S10 s4: the frame of each routine, after the largest entry frame */
+  Label routines;         /* S10 s4: routine k is at label routines + k */
+  const IrProgram *prog;
 } Emit;
 
 static void emit_ops(Asm *a, const Op *ops, size_t count) {
@@ -238,7 +242,7 @@ static int emit_binary(Emit *e, const IrExpr *x) {
 static int emit_expr(Emit *e, const IrExpr *x) {
   switch (x->kind) {
   case IR_EXPR_CONST: asm_push(e->a, x->value); return 1;
-  case IR_EXPR_LOCAL: emit_load(e->a, 32u * (uint64_t)x->local); return 1;
+  case IR_EXPR_LOCAL: emit_load(e->a, e->frame + 32u * (uint64_t)x->local); return 1;
   case IR_EXPR_BINARY: return emit_binary(e, x);
   case IR_EXPR_LOAD: /* word FIELD of the block at address LEFT (a precompile output, S2) */
     if (!emit_expr(e, x->left)) return 0;
@@ -262,7 +266,7 @@ static int emit_stmt(Emit *e, const IrStmt *s) {
   switch (s->kind) {
   case IR_STMT_SET:
     if (!emit_expr(e, s->expr)) return 0;
-    emit_store(a, 32u * (uint64_t)s->local);
+    emit_store(a, e->frame + 32u * (uint64_t)s->local);
     return 1;
   case IR_STMT_IF: {
     Label no = asm_label(a), end = asm_label(a);
@@ -282,9 +286,12 @@ static int emit_stmt(Emit *e, const IrStmt *s) {
     return 1;
   case IR_STMT_TRAP: asm_jump(a, e->trap); return 1;
   case IR_STMT_REVERT: asm_jump(a, e->revert); return 1;
-  case IR_STMT_STOP: asm_op(a, EVM_OP_STOP); return 1;
+  case IR_STMT_STOP:
+    if (e->frame != 0) return 0; /* S10 s4: a routine body has no STOP */
+    asm_op(a, EVM_OP_STOP);
+    return 1;
   case IR_STMT_RETURN: /* a view (C-K4-10): the word at memory 0, 32 bytes */
-    if (!emit_expr(e, s->expr)) return 0;
+    if (e->frame != 0 || !emit_expr(e, s->expr)) return 0;
     emit_ops(a, (const Op[]){EVM_OP_PUSH0, EVM_OP_MSTORE}, 2);
     asm_push(a, 32);
     emit_ops(a, (const Op[]){EVM_OP_PUSH0, EVM_OP_RETURN}, 2);
@@ -337,7 +344,7 @@ static int emit_stmt(Emit *e, const IrStmt *s) {
   }
   case IR_STMT_REPEAT: { /* as Wasm: the body sees the counter values N down to 1 */
     Label top = asm_label(a), end = asm_label(a);
-    uint64_t at = 32u * (uint64_t)s->counter;
+    uint64_t at = e->frame + 32u * (uint64_t)s->counter;
     if (!emit_expr(e, s->expr)) return 0;
     emit_store(a, at);
     asm_jumpdest(a, top);
@@ -372,6 +379,20 @@ static int emit_stmt(Emit *e, const IrStmt *s) {
     emit_ops(a, (const Op[]){EVM_OP_GAS, EVM_OP_STATICCALL, EVM_OP_ISZERO}, 3);
     asm_jump_if(a, e->revert);
     asm_push(a, out);
+    emit_store(a, e->frame + 32u * (uint64_t)s->local);
+    return 1;
+  }
+  case IR_STMT_ROUTINE: { /* S10 s4: the args in the routine frame, the return label, the jump */
+    const IrRoutine *r = s->address < e->prog->routine_count ? &e->prog->routines[s->address] : NULL;
+    if (r == NULL || e->frame != 0 || s->field_count != r->param_count) return 0;
+    for (size_t i = 0; i < s->field_count; i++) {
+      if (!emit_expr(e, s->fields[i])) return 0;
+      emit_store(a, e->routine_frame + 32u * (uint64_t)i);
+    }
+    Label back = asm_label(a);
+    asm_push_label(a, back);
+    asm_jump(a, e->routines + (Label)s->address);
+    asm_jumpdest(a, back);
     emit_store(a, 32u * (uint64_t)s->local);
     return 1;
   }
@@ -395,6 +416,13 @@ static uint64_t block_words(IrBlock b) {
   return n;
 }
 
+/* The end of the frame of FN (S10 s4): the locals, the scratch, the blocks.
+   The data of one statement can go past it: a routine frame after it holds
+   no value across a statement of FN. */
+static uint64_t frame_end(const IrFunc *fn) {
+  return 32u * (uint64_t)fn->local_count + 64u + 32u * block_words(fn->body);
+}
+
 static int emit_block(Emit *e, IrBlock b) {
   int ok = 1;
   for (size_t i = 0; ok && i < b.count; i++) ok = emit_stmt(e, b.items[i]);
@@ -408,6 +436,7 @@ static int emit_block(Emit *e, IrBlock b) {
    form that the EVM back end does not lower. */
 static int evm_entry(Emit *e, const IrFunc *fn, Label label) {
   Asm *a = e->a;
+  e->frame = 0;
   e->scratch = 32u * (uint64_t)fn->local_count;
   e->blocks = e->scratch + 64u;
   e->block_next = 0;
@@ -432,6 +461,24 @@ static int evm_entry(Emit *e, const IrFunc *fn, Label label) {
   return emit_block(e, fn->body);
 }
 
+/* Routine R at label LABEL (S10 s4): its frame after the largest entry
+   frame, then the body, the result word, SWAP1 under the return label and
+   JUMP. The caller wrote the params at the frame. */
+static int evm_routine(Emit *e, const IrRoutine *r, Label label) {
+  Asm *a = e->a;
+  e->frame = e->routine_frame;
+  e->scratch = e->frame + 32u * (uint64_t)r->local_count;
+  e->blocks = e->scratch + 64u;
+  e->block_next = 0;
+  e->data = e->blocks + 32u * block_words(r->body);
+  asm_jumpdest(a, label);
+  if (!emit_block(e, r->body)) return 0;
+  emit_load(a, e->frame + 32u * (uint64_t)r->result);
+  emit_ops(a, (const Op[]){EVM_OP_SWAP1, EVM_OP_JUMP}, 2);
+  e->frame = 0;
+  return 1;
+}
+
 /* The runtime (C-K4b-1; slice K4c: the entries and the views, C-K4-10). The
    dispatcher head reverts on a call value or on call data shorter than 4
    bytes (C-K4-11), puts the selector on the stack and jumps to function i
@@ -447,7 +494,15 @@ static EvmBuild evm_runtime(Asm *a, const IrProgram *prog, Label first) {
     for (size_t j = 0; j < i; j++)
       if (hits[j] == hits[i]) return EVM_BUILD_SELECTOR;
   }
-  Emit e = {a, 0, 0, 0, 0, asm_label(a), asm_label(a), EVM_BUILD_IR};
+  Emit e = {a, 0, 0, 0, 0, asm_label(a), asm_label(a), EVM_BUILD_IR, 0, 0, 0, NULL};
+  e.prog = prog;
+  e.routine_frame = 64u;
+  for (size_t i = 0; i < prog->func_count; i++) {
+    uint64_t end = frame_end(&prog->funcs[i]);
+    e.routine_frame = end > e.routine_frame ? end : e.routine_frame;
+  }
+  e.routines = prog->routine_count > 0 ? asm_label(a) : 0;
+  for (size_t i = 1; i < prog->routine_count; i++) asm_label(a);
   asm_op(a, EVM_OP_CALLVALUE);
   asm_jump_if(a, e.revert);
   asm_push(a, 4);
@@ -473,6 +528,7 @@ static EvmBuild evm_runtime(Asm *a, const IrProgram *prog, Label first) {
   emit_ops(a, (const Op[]){EVM_OP_PUSH0, EVM_OP_REVERT}, 2);
   int ok = 1;
   for (size_t i = 0; ok && i < prog->func_count; i++) ok = evm_entry(&e, &prog->funcs[i], first + (Label)i);
+  for (size_t k = 0; ok && k < prog->routine_count; k++) ok = evm_routine(&e, &prog->routines[k], e.routines + (Label)k);
   return ok ? EVM_BUILD_OK : e.failure;
 }
 

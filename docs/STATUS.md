@@ -1013,3 +1013,89 @@ The attest words of S10 s3 (key 7, s = (k + 7 e) mod r; `wordA` and
 | diff gate rows | 15 | 33 | 5 D4 rows (2 script rows, the mock row, 2 guest rows) and 13 gas rows |
 
 The other count lines of the gate log do not change.
+
+## S10 s4
+
+Slice S10 s4 (the bLSAG slice, PLAN 7, Q-S10-10 (a), Q-S10-12 (a),
+Q-S10-17 (b) and Q-S10-18 (a)) is complete. The change is not
+committed; its base is the USER commit 29cd010 (the S10 s3 commit). The
+gate `make check` is GREEN, exit 0. There is a src change: the routine
+path of `src/ir.h`, `src/lower.c` and `src/evm.c`.
+
+DEVIATIONS for the USER:
+
+- The DEVIATION of S10 s2 (the claim has no ring signature on the EVM,
+  Q-S10-11 (c)) is CLOSED. `claim` checks a bLSAG ring signature
+  through the shared routine `sharedRing`.
+- The open ring fix of Q-S10-10 (a) is CLOSED: H_i comes from the
+  closed key table (Q-S10-17 (b)).
+- The claim form deviates from DESIGN.md section 6 (Q-S10-18 (a)): 4
+  ring map fields keyed by i, not one map keyed by `hash i j`, and the
+  claimed key is (I, n), not (I, batch hash). The DESIGN form is 25649
+  bytes, over EIP-170 (VALIDATION).
+
+Changes (O78):
+
+- `src/ir.h`, `src/lower.c`, `src/evm.c`: the shared routine path
+  (IR_STMT_ROUTINE, `lower_routine_call`, `evm_routine`). A def named
+  `shared` plus an uppercase letter lowers once; each entry calls it.
+- `test/build.sh`, `test/lower/expect.txt`: the rows
+  `test/lower/shared-shape.lang`, `shared-arg.lang` (REFUSE_LOWER) and
+  `shared-call.lang` (new).
+- `test/buildtool.c`, `test/emittool.c`, `test/evmtool.c`,
+  `test/lowertool.c`: the new IR fields in the positional initializers
+  (the check-clang trap).
+- `examples/twin.lang`: `sharedRing` for `cast` and `claim`, the ring
+  map fields, `claimTag`, the claimed key (I, n), the claim selector
+  0xaf3c21e4 (11 args).
+- `test/twin.lang`, `test/twin.txt`: `claimSig`, `claimSigWord`,
+  `claimWith`, `claimKeyOne`, and the rows `claimBatchZero` 1,
+  `claimBatchOne` 0, `claimBadSig` 0 (13 to 14 rows).
+- `test/run/twin-*.script` and the 4 `.out` files: the deposits use the
+  table keys; the new attest B words; the claim rows; `twin-d4.gas`
+  `cast 403491`, `claim 189658`.
+
+The attest B words (k = 29, key 7, s = (29 + 7 e) mod r): the batch
+hash 572081921815354849002554863167009082274090072192049687847530274301525086388u
+and sB 0x27c9abd2761fb046918a43f12368d786597badd7a2aad894b90b0ab96a0ab3e9u.
+
+The claim rows of `test/run/twin-remote.script`: 8 ok (pay 9u, event
+Claimed); 9 revert (the claimed key (I, 0)); 10 revert (the accept
+check: no batch hash with d 20u); 11 revert: the key image of key 1 (a
+point on BN254) with the words of the key 0 signature is fresh in
+`claimed`, but the ring check refuses it. The key image depends on the
+key only, not on the poll or on d.
+
+Traps:
+
+- clang `-Wextra -Werror` refuses a positional initializer that leaves
+  out a new field (-Wmissing-field-initializers); tcc accepts it. Run
+  `make check-clang` after each IR struct change.
+- langc gives no size past EIP-170 (EVM_SIZE). Measure a form over the
+  limit by a differential build.
+- fold is a right fold: `claimSigWord l k` is the word k from the END
+  of l.
+- `wordAt` is a domain field: the name gave REFUSE_NAME R4.
+- A key image that is not on BN254 (the first row 11 used (5u, 6u))
+  traps in `ecMul`; the row now uses the real image of key 1.
+- The attest s words are hex (`0x...u`), the h words decimal.
+
+Mutants: M1 (the claim ring check to `u256Le d d`) KILLED by
+`test/run.sh` (row 11) and `test/twin.sh` (`claimBadSig`); the gas row
+cannot kill it. M2 (the routine arg slots 0 and 1 swapped in
+`src/evm.c`) KILLED for `cast` and `claim` by `test/diff.sh` (16
+failures of 33 rows).
+
+| Count | S10 s3 | S10 s4 | Reason |
+|---|---|---|---|
+| lower refusals | 18 | 20 | `shared-shape.lang`, `shared-arg.lang` |
+| build checks | 35 | 40 | 2 rows and 3 expect checks |
+| twin rows | 13 | 14 | `claimBadSig` |
+
+The other count lines of the gate log do not change.
+
+Review (2026-10-25): the key image sentence here and in O78 (the image
+depends on the key only), one comment in `test/run/twin-remote.script`,
+one `frame_end` call for each function in `src/evm.c`, and the `shared
+calls` count in `test/build.sh` at byte boundaries only. The counts do
+not change.

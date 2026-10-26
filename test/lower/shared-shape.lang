@@ -1,0 +1,10 @@
+-- REFUSE_LOWER (S10 s4): a def named shared plus an uppercase letter is a shared
+-- routine, and a shared routine has the view shape (env : Env) -> (s : State) ->
+-- words -> word. sharedTwice has no Env and no State: the build refuses it.
+state State := makeState (count : U256)
+def init : State := makeState 0u
+
+def sharedTwice : (x : U256) -> U256 := fun (x : U256) => hash x x
+
+def twice : (env : Env) -> (s : State) -> (x : U256) -> U256 :=
+  fun (env : Env) (s : State) (x : U256) => sharedTwice x

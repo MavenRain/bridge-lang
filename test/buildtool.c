@@ -28,7 +28,7 @@ static int selector_collision(void) {
   FILE *out = tmpfile();
   if (out == NULL) return 0;
   for (size_t order = 0; order < 2; order++) {
-    const IrProgram program = {funcs, 2};
+    const IrProgram program = {funcs, 2, NULL, 0};
     const TargetPart parts[] = {TARGET_PART_MAIN, TARGET_PART_RUNTIME};
     for (size_t i = 0; i < sizeof parts / sizeof parts[0]; i++) {
       EvmBuild result = evm_build(&program, NULL, 0, NULL, parts[i], out);
@@ -58,7 +58,7 @@ static int long_event(void) {
   const IrStmt stop = {.kind = IR_STMT_STOP};
   const IrStmt *items[] = {&log, &stop};
   const IrFunc func = {.name = "fire", .body = {items, 2}};
-  const IrProgram program = {&func, 1};
+  const IrProgram program = {&func, 1, NULL, 0};
   /* Geth SHA3 of the 259-byte signature: the 130-byte name and 16 uint256 fields. */
   static const char topic[] = "7fb0a29f25fa17882045416d0db30634690efac21a991273249de567262a1747ff";
   const TargetPart parts[] = {TARGET_PART_MAIN, TARGET_PART_RUNTIME};
@@ -89,9 +89,9 @@ static int runtime_size(void) {
     pairs[i][30] = (unsigned char)(i >> 8);
     pairs[i][31] = (unsigned char)i;
   }
-  int ok = evm_build(&(IrProgram){NULL, 0}, (const unsigned char (*)[64])pairs, 1000, NULL, TARGET_PART_MAIN, out) == EVM_BUILD_SIZE
+  int ok = evm_build(&(IrProgram){NULL, 0, NULL, 0}, (const unsigned char (*)[64])pairs, 1000, NULL, TARGET_PART_MAIN, out) == EVM_BUILD_SIZE
     && ftell(out) == 0;
-  ok = ok && evm_build(&(IrProgram){NULL, 0}, (const unsigned char (*)[64])pairs, 1000, NULL, TARGET_PART_RUNTIME, out) == EVM_BUILD_OK;
+  ok = ok && evm_build(&(IrProgram){NULL, 0, NULL, 0}, (const unsigned char (*)[64])pairs, 1000, NULL, TARGET_PART_RUNTIME, out) == EVM_BUILD_OK;
   rewind(out);
   size_t len = fread(hex, 1, sizeof hex - 1u, out);
   ok = ok && !ferror(out) && len == sizeof want - 1u && strcmp(hex, want) == 0;
@@ -110,7 +110,7 @@ static int runtime_limit(void) {
   for (size_t i = 0; i < 7000; i++) items[i] = &store;
   items[7000] = &stop;
   IrFunc func = {.name = "large", .body = {items, 7001}};
-  const IrProgram program = {&func, 1};
+  const IrProgram program = {&func, 1, NULL, 0};
   const TargetPart parts[] = {TARGET_PART_MAIN, TARGET_PART_RUNTIME};
   int ok = 1;
   for (size_t round = 0; round < 2; round++) {

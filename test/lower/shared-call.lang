@@ -1,0 +1,14 @@
+-- A build row of test/build.sh (S10 s4), not a refusal row: the shared routine
+-- sharedMix has one body in the runtime, and the views viewA and viewB call it.
+-- The routine reads the state field count (slot 0) as a view does.
+state State := makeState (count : U256)
+def init : State := makeState 7u
+
+def sharedMix : (env : Env) -> (s : State) -> (a b : U256) -> U256 :=
+  fun (env : Env) (s : State) (a b : U256) => hash (hash a b) (count s)
+
+def viewA : (env : Env) -> (s : State) -> (a : U256) -> U256 :=
+  fun (env : Env) (s : State) (a : U256) => sharedMix env s a 1u
+
+def viewB : (env : Env) -> (s : State) -> (a b : U256) -> U256 :=
+  fun (env : Env) (s : State) (a b : U256) => hash (sharedMix env s b a) 2u
