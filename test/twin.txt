@@ -12,3 +12,11 @@ slotAfterOpen 0
 claimBatchZero 1
 claimBatchOne 0
 claimBadSig 0
+amendAccepted 1
+amendMenuOut 0
+amendOldPoll 0
+amendTwice 0
+amendPoll 1
+amendCharter 1
+quotaTwoOfThree 1
+quotaThreeOfThree 1

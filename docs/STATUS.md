@@ -1100,11 +1100,52 @@ one `frame_end` call for each function in `src/evm.c`, and the `shared
 calls` count in `test/build.sh` at byte boundaries only. The counts do
 not change.
 
+## S10 s6
+
+S10 s6 (2026-10-26) adds amendment to the twin bytecode (Q-S10-19 (a),
+PLAN O80). The base is the USER commit 51902c9 (S10 s5). The change is
+not committed. The serial baseline
+(`bridge-lang-work/S10-s6-baseline.log`) and the serial final gate
+(`bridge-lang-work/S10-s6-final-gate.log`) exit 0.
+
+| Item | S10 s6 |
+|---|---|
+| State fields | `poll` (init 1) and `charter` (init 1) |
+| Amend | `enact` tag 3, dx the menu index (`u256Le dx 2u`), dy 0 |
+| Menu | index k: `close` needs k + 1 of 3 votes |
+| Poll gate | castSlot, cast, close and enact need n = poll; each enact sets poll + 1 |
+| Tally clear | the tally keys of poll + 1 are fresh (no clear stores) |
+| Views | `pollOf`, `charterOf` |
+| Runtime | 24472 bytes, 104 free under EIP-170 |
+| Init code plus argument | 25410 bytes, 23742 free under EIP-3860 |
+
+The twin scripts add poll 2: the amend proposal of constitution 2 (tag
+3). The home enact and the remote enact install constitution 2 and set
+poll 3. A castSlot of poll 1 then reverts. `build/sigmatool cast` fixes
+poll 1, thus the poll 2 cast words come from a scratch copy with poll 2u
+(`bridge-lang-work/s10s6/d4/sigmatool2`, not in the repo).
+
+Mutants of the guest program (no `make -B`: the tools do not change), 5
+of 5 KILLED by their own twin row:
+
+| Mutant | Change | .out diff |
+|---|---|---|
+| amendMenuOut | `u256Le dx 2u` to 3u | twin-remote |
+| amendPoll | `u256Add (poll s) 1u` to `poll s` | twin-remote, both D4 |
+| amendCharter | install `dx` to `charter s` | twin-remote, both D4 |
+| amendOldPoll | the enact poll gate to flagYes | none |
+| quotaThreeOfThree | `u256Add (charter s) 2u` to 3u | none |
+
+Each restore is `cp` plus `cmp` true, and the final `examples/twin.lang`
+cmp is 0. The counts are in the `S10 close` count table. s6 has no src
+change.
+
 ## S10 close
 
-The S10 close is OPEN at amendment (Q-S10-19). This s5 audit is based
-on the USER commit fe1e366 (S10 s4).
-The change is not committed. The serial baseline
+The S10 close is DONE (2026-10-26, S10 s6): the amendment exit is
+DONE in s6 (Q-S10-19 (a)), thus each exit of PLAN 7 is DONE. The s5
+audit is based on the USER commit fe1e366 (S10 s4). The USER
+committed s5 as 51902c9. The serial baseline
 (`bridge-lang-work/S10-s5-baseline.log`) and the serial final gate
 (`bridge-lang-work/S10-s5-final-gate.log`) exit 0. After the review
 fixes, the serial review gate writes
@@ -1117,8 +1158,9 @@ fixes, the serial review gate writes
 | s3 | Two deployments, gas rows and contract mutants | `test/diff.sh`, O77 |
 | s4 | Shared bLSAG, open ring fix, signed claim on the EVM | `sharedRing`, claim rows 8 to 11, O78 |
 | s5 | Routine call refusal text and exit audit | `test/build.sh` exact message rows, O79 |
+| s6 | Amendment: fields `poll` and `charter`, `enact` tag 3, quota menu, views | Twin rows `amend*`, the D4 amend steps, O80 |
 
-The exit audit of PLAN 7 is below. Amendment stays OPEN:
+The exit audit of PLAN 7 is below. Each exit is DONE:
 
 | Exit | State | Slice | Evidence |
 |---|---|---|---|
@@ -1126,59 +1168,60 @@ The exit audit of PLAN 7 is below. Amendment stays OPEN:
 | `cast`: bLSAG and one-hot proof, encrypted tally | DONE | s1, s4 | `sharedRing`, signed cast and tally rows in the twin scripts |
 | `close`: MPC opening, constitution, stored decision | DONE | s2, s3 | Two close steps, opened and decided rows in the twin scripts |
 | `enact`: home decision and remote attestation | DONE | s2, s3 | Home and remote enact steps and the attest A rows |
-| `enact`: amendment as orbit-lang | OPEN | Q-S10-19 | No constitution installation or poll reset in the twin bytecode |
+| `enact`: amendment as orbit-lang | DONE | s6 | Twin rows `amend*`; the D4 amend steps of poll 2 (home and remote); mutants amendMenuOut, amendPoll, amendCharter, amendOldPoll and quotaThreeOfThree |
 | `deposit`: swap, pull, batch and event | DONE | s2, s3 | Three deposit steps and their storage and event rows |
 | `seal`: block bound and batch hash event | DONE | s2, s3 | Seal step, guard at `sealAt`, and Sealed event rows |
 | `accept`: remote attestation and stored hash | DONE | s2, s3 | Remote accept and accepted batch state |
 | `claim`: ring, signature, replay check, swap, pay, event | DONE | s2, s4 | `twin-remote.script` rows 8 to 11; `claimBadSig`; s4 mutants M1 and M2 |
-| Size and gas rows | DONE | s3 to s5 | VALIDATION, `test/run/twin-d4.gas`; runtime 24166, init plus argument 25094 bytes |
+| Size and gas rows | DONE | s3 to s6 | VALIDATION, `test/run/twin-d4.gas`; runtime 24472, init plus argument 25410 bytes |
 
 The only supported ring size is 3. `claim` has three member indices
 and three signature responses; `sharedRing` is unrolled for them.
-The measured claim bound is 189658 execution gas for the recorded
-steps. Other ring sizes and other prestates have no measured bound.
+The measured claim bound is 189661 execution gas (S10 s6) for the
+recorded steps. Other ring sizes and other prestates have no measured
+bound.
 No transaction intrinsic gas is included. See VALIDATION and O17.
 
-| Count | S10 s4 | S10 s5 |
-|---|---|---|
-| examples | 59 | 59 |
-| parse refusals | 19 | 19 |
-| check refusals | 193 | 193 |
-| pool, bridge, kit refusals | 4, 6, 22 | 4, 6, 22 |
-| evals, proves | 355, 2 | 355, 2 |
-| contracts written, refused | 2, 5 | 2, 5 |
-| rings built, refused | 7, 2 | 7, 2 |
-| guest differential evals | 28 | 28 |
-| runs, host differential runs, run refusals | 10, 14, 10 | 10, 14, 10 |
-| twin rows | 14 | 14 |
-| asm checks | 8 | 8 |
-| builds, lower refusals | 3, 20 | 3, 21 |
-| build checks | 40 | 45 |
-| dispatch checks | 20 | 20 |
-| EVM steps, differential rows | 43, 14 | 43, 14 |
-| precompile steps | 146 | 146 |
-| mock rows, diff rows | 13, 33 | 13, 33 |
-| emit execution regressions | 24 | 24 |
-| gate failures | 0 | 0 |
+| Count | S10 s4 | S10 s5 | S10 s6 |
+|---|---|---|---|
+| examples | 59 | 59 | 59 |
+| parse refusals | 19 | 19 | 19 |
+| check refusals | 193 | 193 | 193 |
+| pool, bridge, kit refusals | 4, 6, 22 | 4, 6, 22 | 4, 6, 22 |
+| evals, proves | 355, 2 | 355, 2 | 355, 2 |
+| contracts written, refused | 2, 5 | 2, 5 | 2, 5 |
+| rings built, refused | 7, 2 | 7, 2 | 7, 2 |
+| guest differential evals | 28 | 28 | 28 |
+| runs, host differential runs, run refusals | 10, 14, 10 | 10, 14, 10 | 10, 14, 10 |
+| twin rows | 14 | 14 | 22 |
+| asm checks | 8 | 8 | 8 |
+| builds, lower refusals | 3, 20 | 3, 21 | 3, 21 |
+| build checks | 40 | 45 | 45 |
+| dispatch checks | 20 | 20 | 20 |
+| EVM steps, differential rows | 43, 14 | 43, 14 | 43, 14 |
+| precompile steps | 146 | 146 | 146 |
+| mock rows, diff rows | 13, 33 | 13, 33 | 13, 35 |
+| emit execution regressions | 24 | 24 | 24 |
+| gate failures | 0 | 0 | 0 |
 
 `src/lower.c` now names a shared routine call in both call refusals.
 The exact message rows for `shared-arg.lang` and `shared-state.lang`
 check more than the code REFUSE_LOWER: each call refusal has a row.
 The entry word refusals keep their existing text.
 
-Open at this audit: Q-S10-19, then the remaining mutant work and
-the project close (PLAN S11). The s4 mutants M1 and M2 are already
-KILLED. The runtime has
-410 free bytes. The closed key table, four ring map fields and claimed
+Open at this audit: the remaining mutant work and the project close
+(PLAN S11). The s4 mutants M1 and M2 and the five s6 mutants are
+KILLED. The runtime has 104 free bytes (S10 s6). The closed key
+table, four ring map fields and claimed
 key (I, n) are the ruled form. Larger rings or a variable ring ABI
 need a USER scope decision, a size check and new gas rows.
 
 The guest prelude still has `amend` (`SPEC.md:119`), with its laws
 in `examples/dao.lang`. Q-S10-2 (a) keeps the separate table writer.
-These do not install a constitution or reset a poll in the twin
-contract. Its `enact` guard accepts only tags 0 to 2. No scope ruling
-that removes amendment from PLAN 7 was found. The USER must rule
-Q-S10-19, or the requirement must be met, before S10 can close.
+At the s5 audit these did not install a constitution or reset a poll
+in the twin contract, and its `enact` guard accepted only tags 0 to
+2. The USER ruled Q-S10-19 (a). S10 s6 adds the amend `enact` tag 3
+to the twin bytecode (`## S10 s6`).
 
 Review of the s5 stage (2026-10-25), five findings, all fixed: the
 first routine call refusal had no exact message row (now

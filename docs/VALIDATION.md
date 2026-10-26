@@ -499,3 +499,42 @@ steps and prestates of `twin-d4-home.script` and
 `twin-d4-remote.script`, not all calldata or all storage states. It
 excludes transaction intrinsic gas. O17 is closed for the supported
 ring size; larger or variable rings need a USER scope decision in S11.
+
+## The size and gas of the twin contract (S10 s6)
+
+The direct build of `examples/twin.lang` with the s6 change gives the
+sizes below: `build/langc --kit build examples/twin.lang --runtime` for
+the runtime and the same build with no flag for the init code. The bytes
+are the hex length / 2. The side argument is one 32-byte word.
+
+| Build | bytes | Limit | Free |
+|---|---|---|---|
+| init code | 25378 | 49152 (EIP-3860) | 23774 |
+| init code plus side argument | 25410 | 49152 (EIP-3860) | 23742 |
+| runtime | 24472 | 24576 (EIP-170) | 104 |
+
+The s6 runtime is 306 bytes more than the s5 runtime (24166): the fields
+`poll` and `charter`, the poll gates, the amend tag, the quota menu and
+the views `pollOf` and `charterOf`. The size probe B of the design gave
+the same 24472 bytes. The S10 s5 size table is history.
+
+The gas bounds of `test/run/twin-d4.gas` (Q-S10-26 (a)) are the largest
+gas of each entry in the first S10 s6 run. The rows that change:
+
+| Entry | Bound before s6 | S10 s6 bound |
+|---|---|---|
+| cast | 403491 | 405645 |
+| castSlot | 82143 | 84298 |
+| charterOf | none (new row) | 2517 |
+| claim | 189658 | 189661 |
+| close | 145009 | 149301 |
+| enact | 52506 | 59946 |
+| pollOf | none (new row) | 2495 |
+
+The other 8 rows do not change. The amend enact steps of poll 2 cost
+42509 (home, the stored Decision word) and 53531 (remote, with the
+attest words). The enact bound 59946 is the remote enact of poll 1 (a
+liquidity Decision with its attest), not an amend step. The poll gate
+and the poll + 1 store make each enact cost more than in s5. The claim
+bound 189661 is for ring size 3 only (O17). No transaction intrinsic gas
+is included.

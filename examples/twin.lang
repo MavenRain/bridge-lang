@@ -1,6 +1,7 @@
 -- The twin contract (S10 s2, map D1, Q-S10-2 (a), Q-S10-3 (a)). One bytecode, two deployments:
 -- side 0 (home) and side 1 (remote). The init argument is the side (Q-S10-5 (a)).
 -- Home: castSlot k times, then cast; close one slot per call; enact on the stored Decision.
+-- One live poll (Q-S10-23 (a)): each enact increments it. Amend (tag 3) installs a charter (S10 s6).
 -- Remote: enact with the Schnorr attest. Both: deposit, seal, accept, claim.
 -- A kit file is checked alone (O64). So the defs are copies of examples/cast.lang,
 -- examples/elgamal.lang, examples/enact.lang and examples/bridge.lang. Each entry has 30 words at most.
@@ -225,15 +226,17 @@ event Sealed (from : U256) (n : U256) (h : U256)
 event Claimed (image : U256) (d : U256)
 
 -- The storage (map D1). The side is the init argument (Q-S10-5 (a)). The reserves start at (1000, 1000).
-state State := makeState (side : U256) (slots : Map U256 U256) (tally : Map U256 U256) (used : Map U256 Flag) (props : Map U256 U256) (casts : U256) (opened : Map U256 U256) (decided : Map U256 U256) (enacted : Map U256 Flag) (rx : U256) (ry : U256) (batchH : U256) (batchN : U256) (sealAt : Nat) (accepted : Map U256 Flag) (claimed : Map U256 Flag) (batchSize : U256) (batchCredit : U256) (ring0 : Map U256 U256) (ring1 : Map U256 U256) (ring2 : Map U256 U256) (ring3 : Map U256 U256)
+-- The poll and the charter start at 1 (Q-S10-21 (a), Q-S10-24 (a)).
+state State := makeState (side : U256) (slots : Map U256 U256) (tally : Map U256 U256) (used : Map U256 Flag) (props : Map U256 U256) (casts : U256) (opened : Map U256 U256) (decided : Map U256 U256) (enacted : Map U256 Flag) (rx : U256) (ry : U256) (batchH : U256) (batchN : U256) (sealAt : Nat) (accepted : Map U256 Flag) (claimed : Map U256 Flag) (batchSize : U256) (batchCredit : U256) (ring0 : Map U256 U256) (ring1 : Map U256 U256) (ring2 : Map U256 U256) (ring3 : Map U256 U256) (poll : U256) (charter : U256)
 
 -- Entry (home): one slot OR proof at ctx. It stores the hash of the slot cipher under (ctx, j).
+-- Only the live poll (n = poll, Q-S10-23 (a)).
 def castSlot : (env : Env) -> (s : State) -> (n j ix iy c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y e0 e1 z0 z1 : U256) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) (n j ix iy c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y e0 e1 z0 z1 : U256) =>
-    flagIf (flagIf (u256Eq (side s) 0u) (u256Eq (mapGet (opened s) (hash n 0u)) 0u) flagNo)
+    flagIf (flagIf (u256Eq (side s) 0u) (flagIf (u256Eq n (poll s)) (u256Eq (mapGet (opened s) (hash n 0u)) 0u) flagNo) flagNo)
       (flagIf (u256Le j 1u)
       (flagIf (slot (ctxOf (pair ix iy) n) j (first pk) (second pk) c1x c1y c2x c2y a0x a0y b0x b0y a1x a1y b1x b1y e0 e1 z0 z1)
-      (some (pair (makeState (side s) (mapSet (slots s) (hash (ctxOf (pair ix iy) n) j) (hash (hash (hash c1x c1y) c2x) c2y)) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (rx s) (ry s) (batchH s) (batchN s) (sealAt s) (accepted s) (claimed s) (batchSize s) (batchCredit s) (ring0 s) (ring1 s) (ring2 s) (ring3 s)) nil))
+      (some (pair (makeState (side s) (mapSet (slots s) (hash (ctxOf (pair ix iy) n) j) (hash (hash (hash c1x c1y) c2x) c2y)) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (rx s) (ry s) (batchH s) (batchN s) (sealAt s) (accepted s) (claimed s) (batchSize s) (batchCredit s) (ring0 s) (ring1 s) (ring2 s) (ring3 s) (poll s) (charter s)) nil))
       none)
       none)
       none
@@ -272,23 +275,24 @@ def ringT2 : Map U256 U256 :=
 def ringT3 : Map U256 U256 :=
   mapSet (mapSet (mapSet mapEmpty 0u (second kh0)) 1u (second kh1)) 2u (second kh2)
 def init : U256 -> State := fun (x : U256) =>
-  makeState x mapEmpty mapEmpty mapEmpty mapEmpty 0u mapEmpty mapEmpty mapEmpty 1000u 1000u (batchSeed 0u) 0u 0 mapEmpty mapEmpty 0u 0u ringT0 ringT1 ringT2 ringT3
+  makeState x mapEmpty mapEmpty mapEmpty mapEmpty 0u mapEmpty mapEmpty mapEmpty 1000u 1000u (batchSeed 0u) 0u 0 mapEmpty mapEmpty 0u 0u ringT0 ringT1 ringT2 ringT3 1u 1u
 def sharedRing : (env : Env) -> (s : State) -> (i0 i1 i2 poll ch c s1 s2 s3 ix iy : U256) -> Flag :=
   fun (env : Env) (s : State) (i0 i1 i2 poll ch c s1 s2 s3 ix iy : U256) =>
   blsag3 (pair (mapGet (ring0 s) i0) (mapGet (ring1 s) i0)) (pair (mapGet (ring2 s) i0) (mapGet (ring3 s) i0)) (pair (mapGet (ring0 s) i1) (mapGet (ring1 s) i1)) (pair (mapGet (ring2 s) i1) (mapGet (ring3 s) i1)) (pair (mapGet (ring0 s) i2) (mapGet (ring1 s) i2)) (pair (mapGet (ring2 s) i2) (mapGet (ring3 s) i2)) poll ch c s1 s2 s3 ix iy
 
 -- Entry (home): the ring signature over w of the two stored slots, a fresh key image per poll,
 -- the proposal word of the first cast of the poll, the sum proof and the tally add.
+-- Only the live poll (n = poll, Q-S10-23 (a)).
 def cast : (env : Env) -> (s : State) -> (n p a0 a1 a2 a3 b0 b1 b2 b3 ax ay bx by z w0 w1 w2 w3 w4 w5 : U256) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) (n p a0 a1 a2 a3 b0 b1 b2 b3 ax ay bx by z w0 w1 w2 w3 w4 w5 : U256) =>
-    flagIf (flagIf (u256Eq (side s) 0u) (u256Eq (mapGet (opened s) (hash n 0u)) 0u) flagNo)
+    flagIf (flagIf (u256Eq (side s) 0u) (flagIf (u256Eq n (poll s)) (u256Eq (mapGet (opened s) (hash n 0u)) 0u) flagNo) flagNo)
       (flagIf (sharedRing env s 0u 1u 2u (pollWord n p) (ctWord (pair (pair a0 a1) (pair a2 a3)) (pair (pair b0 b1) (pair b2 b3))) w0 w1 w2 w3 w4 w5)
       (flagIf (u256Eq (mapGet (slots s) (hash (ctxOf (pair w4 w5) n) 0u)) (hash (hash (hash a0 a1) a2) a3))
       (flagIf (u256Eq (mapGet (slots s) (hash (ctxOf (pair w4 w5) n) 1u)) (hash (hash (hash b0 b1) b2) b3))
       (flagIf (flagIf (mapGet (used s) (ctxOf (pair w4 w5) n)) flagNo flagYes)
       (flagIf (flagIf (u256Eq (mapGet (props s) n) 0u) flagYes (u256Eq (mapGet (props s) n) p))
       (flagIf (sumPf (ctxOf (pair w4 w5) n) (elgAdd (pair (pair a0 a1) (pair a2 a3)) (pair (pair b0 b1) (pair b2 b3))) (pair (pair (pair ax ay) (pair bx by)) z))
-      (some (pair (makeState (side s) (slots s) (mapSet (mapSet (mapSet (mapSet (mapSet (mapSet (mapSet (mapSet (tally s) (hash n 0u) (first (ecAdd (pair (mapGet (tally s) (hash n 0u)) (mapGet (tally s) (hash n 1u))) (pair a0 a1)))) (hash n 1u) (second (ecAdd (pair (mapGet (tally s) (hash n 0u)) (mapGet (tally s) (hash n 1u))) (pair a0 a1)))) (hash n 2u) (first (ecAdd (pair (mapGet (tally s) (hash n 2u)) (mapGet (tally s) (hash n 3u))) (pair a2 a3)))) (hash n 3u) (second (ecAdd (pair (mapGet (tally s) (hash n 2u)) (mapGet (tally s) (hash n 3u))) (pair a2 a3)))) (hash n 4u) (first (ecAdd (pair (mapGet (tally s) (hash n 4u)) (mapGet (tally s) (hash n 5u))) (pair b0 b1)))) (hash n 5u) (second (ecAdd (pair (mapGet (tally s) (hash n 4u)) (mapGet (tally s) (hash n 5u))) (pair b0 b1)))) (hash n 6u) (first (ecAdd (pair (mapGet (tally s) (hash n 6u)) (mapGet (tally s) (hash n 7u))) (pair b2 b3)))) (hash n 7u) (second (ecAdd (pair (mapGet (tally s) (hash n 6u)) (mapGet (tally s) (hash n 7u))) (pair b2 b3)))) (mapSet (used s) (ctxOf (pair w4 w5) n) flagYes) (mapSet (props s) n p) (u256Add (casts s) 1u) (opened s) (decided s) (enacted s) (rx s) (ry s) (batchH s) (batchN s) (sealAt s) (accepted s) (claimed s) (batchSize s) (batchCredit s) (ring0 s) (ring1 s) (ring2 s) (ring3 s)) nil))
+      (some (pair (makeState (side s) (slots s) (mapSet (mapSet (mapSet (mapSet (mapSet (mapSet (mapSet (mapSet (tally s) (hash n 0u) (first (ecAdd (pair (mapGet (tally s) (hash n 0u)) (mapGet (tally s) (hash n 1u))) (pair a0 a1)))) (hash n 1u) (second (ecAdd (pair (mapGet (tally s) (hash n 0u)) (mapGet (tally s) (hash n 1u))) (pair a0 a1)))) (hash n 2u) (first (ecAdd (pair (mapGet (tally s) (hash n 2u)) (mapGet (tally s) (hash n 3u))) (pair a2 a3)))) (hash n 3u) (second (ecAdd (pair (mapGet (tally s) (hash n 2u)) (mapGet (tally s) (hash n 3u))) (pair a2 a3)))) (hash n 4u) (first (ecAdd (pair (mapGet (tally s) (hash n 4u)) (mapGet (tally s) (hash n 5u))) (pair b0 b1)))) (hash n 5u) (second (ecAdd (pair (mapGet (tally s) (hash n 4u)) (mapGet (tally s) (hash n 5u))) (pair b0 b1)))) (hash n 6u) (first (ecAdd (pair (mapGet (tally s) (hash n 6u)) (mapGet (tally s) (hash n 7u))) (pair b2 b3)))) (hash n 7u) (second (ecAdd (pair (mapGet (tally s) (hash n 6u)) (mapGet (tally s) (hash n 7u))) (pair b2 b3)))) (mapSet (used s) (ctxOf (pair w4 w5) n) flagYes) (mapSet (props s) n p) (u256Add (casts s) 1u) (opened s) (decided s) (enacted s) (rx s) (ry s) (batchH s) (batchN s) (sealAt s) (accepted s) (claimed s) (batchSize s) (batchCredit s) (ring0 s) (ring1 s) (ring2 s) (ring3 s) (poll s) (charter s)) nil))
       none)
       none)
       none)
@@ -299,17 +303,18 @@ def cast : (env : Env) -> (s : State) -> (n p a0 a1 a2 a3 b0 b1 b2 b3 ax ay bx b
 
 -- Entry (home): open one slot of the tally of poll n with the shares 1 and 2 (DLEQ, lag12).
 -- Opening freezes the poll. Counts are bounded by the three voters and stored plus 1. The last slot (j = 1) stores the Decision word:
--- the proposal word when slot 0 has 2 votes or more, else the keep word.
+-- the proposal word when slot 0 has charter + 1 votes or more, else the keep word.
+-- The charter is the menu index k: k + 1 of the 3 votes (Q-S10-20 (a)). Only the live poll.
 def close : (env : Env) -> (s : State) -> (n j e1x e1y a1x a1y b1x b1y z1 e2x e2y a2x a2y b2x b2y z2 m : U256) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) (n j e1x e1y a1x a1y b1x b1y z1 e2x e2y a2x a2y b2x b2y z2 m : U256) =>
-    flagIf (u256Eq (side s) 0u)
+    flagIf (flagIf (u256Eq (side s) 0u) (u256Eq n (poll s)) flagNo)
       (flagIf (flagIf (u256Le j 1u) (u256Le m 3u) flagNo)
       (flagIf (u256Eq (mapGet (opened s) (hash n j)) 0u)
       (flagIf (flagIf (u256Eq j 0u) flagYes (flagIf (u256Eq (mapGet (opened s) (hash n 0u)) 0u) flagNo flagYes))
       (flagIf (dleqOk (ecMul gen 12u) (pair (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 0u))) (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 1u)))) (pair e1x e1y) (pair (pair (pair a1x a1y) (pair b1x b1y)) z1))
       (flagIf (dleqOk (ecMul gen 17u) (pair (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 0u))) (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 1u)))) (pair e2x e2y) (pair (pair (pair a2x a2y) (pair b2x b2y)) z2))
       (flagIf (openIs (pair e1x e1y) (pair e2x e2y) (pair (pair (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 0u))) (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 1u)))) (pair (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 2u))) (mapGet (tally s) (hash n (u256Add (u256Add (u256Add j j) (u256Add j j)) 3u))))) m)
-      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (mapSet (opened s) (hash n j) (u256Add m 1u)) (mapSet (decided s) n (flagIf (u256Eq j 1u) (flagIf (u256Le 3u (mapGet (opened s) (hash n 0u))) (mapGet (props s) n) (hash (hash 0u 0u) 0u)) (mapGet (decided s) n))) (enacted s) (rx s) (ry s) (batchH s) (batchN s) (sealAt s) (accepted s) (claimed s) (batchSize s) (batchCredit s) (ring0 s) (ring1 s) (ring2 s) (ring3 s)) nil))
+      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (mapSet (opened s) (hash n j) (u256Add m 1u)) (mapSet (decided s) n (flagIf (u256Eq j 1u) (flagIf (u256Le (u256Add (charter s) 2u) (mapGet (opened s) (hash n 0u))) (mapGet (props s) n) (hash (hash 0u 0u) 0u)) (mapGet (decided s) n))) (enacted s) (rx s) (ry s) (batchH s) (batchN s) (sealAt s) (accepted s) (claimed s) (batchSize s) (batchCredit s) (ring0 s) (ring1 s) (ring2 s) (ring3 s) (poll s) (charter s)) nil))
       none)
       none)
       none)
@@ -318,16 +323,18 @@ def close : (env : Env) -> (s : State) -> (n j e1x e1y a1x a1y b1x b1y z1 e2x e2
       none)
       none
 
--- Entry: run the Decision (tag 0 keep, 1 addLiq, 2 removeLiq) of proposal n once. Home: the
+-- Entry: run the Decision (tag 0 keep, 1 addLiq, 2 removeLiq, 3 amend) of the live poll n once. Home: the
 -- stored Decision word. Remote: the Schnorr attest of attestMsg enactTag 0u n word (key 7).
+-- Each enact increments the poll. Amend (dx the menu index, at most 2, dy 0) installs the charter dx.
+-- The tally of the new poll is zero: no cast reaches it before (fresh keys, Q-S10-22 (a)).
 def enact : (env : Env) -> (s : State) -> (n tag dx dy sx sy ss : U256) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) (n tag dx dy sx sy ss : U256) =>
-    flagIf (flagIf (mapGet (enacted s) n) flagNo flagYes)
-      (flagIf (u256Le tag 2u)
+    flagIf (flagIf (mapGet (enacted s) n) flagNo (u256Eq n (poll s)))
+      (flagIf (u256Le tag 3u)
       (flagIf (flagIf (u256Eq (side s) 0u) (u256Eq (mapGet (decided s) n) (hash (hash tag dx) dy)) (schnorrOk pk (attestMsg enactTag 0u n (hash (hash tag dx) dy)) (pair (pair sx sy) ss)))
-      (flagIf (flagIf (u256Eq tag 0u) (flagIf (u256Eq dx 0u) (u256Eq dy 0u) flagNo) (flagIf (u256Eq tag 1u) (addOk (rx s) (ry s) dx dy) (removeOk (rx s) (ry s) dx dy)))
+      (flagIf (flagIf (u256Eq tag 0u) (flagIf (u256Eq dx 0u) (u256Eq dy 0u) flagNo) (flagIf (u256Eq tag 1u) (addOk (rx s) (ry s) dx dy) (flagIf (u256Eq tag 2u) (removeOk (rx s) (ry s) dx dy) (flagIf (u256Le dx 2u) (u256Eq dy 0u) flagNo))))
       (flagIf (u256Le 1u (flagIf (u256Eq tag 1u) (addLiqX (rx s) (ry s) dx dy) (flagIf (u256Eq tag 2u) (removeLiqX (rx s) (ry s) dx dy) (rx s))))
-      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (mapSet (enacted s) n flagYes) (flagIf (u256Eq tag 1u) (addLiqX (rx s) (ry s) dx dy) (flagIf (u256Eq tag 2u) (removeLiqX (rx s) (ry s) dx dy) (rx s))) (flagIf (u256Eq tag 1u) (addLiqY (rx s) (ry s) dx dy) (flagIf (u256Eq tag 2u) (removeLiqY (rx s) (ry s) dx dy) (ry s))) (batchH s) (batchN s) (sealAt s) (accepted s) (claimed s) (batchSize s) (batchCredit s) (ring0 s) (ring1 s) (ring2 s) (ring3 s)) nil))
+      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (mapSet (enacted s) n flagYes) (flagIf (u256Eq tag 1u) (addLiqX (rx s) (ry s) dx dy) (flagIf (u256Eq tag 2u) (removeLiqX (rx s) (ry s) dx dy) (rx s))) (flagIf (u256Eq tag 1u) (addLiqY (rx s) (ry s) dx dy) (flagIf (u256Eq tag 2u) (removeLiqY (rx s) (ry s) dx dy) (ry s))) (batchH s) (batchN s) (sealAt s) (accepted s) (claimed s) (batchSize s) (batchCredit s) (ring0 s) (ring1 s) (ring2 s) (ring3 s) (u256Add (poll s) 1u) (flagIf (u256Eq tag 3u) dx (charter s))) nil))
       none)
       none)
       none)
@@ -340,7 +347,7 @@ def deposit : (env : Env) -> (s : State) -> (kx ky c : U256) -> Option (Prod Sta
   fun (env : Env) (s : State) (kx ky c : U256) =>
     flagIf (flagIf (u256Le (batchSize s) 2u) (flagIf (u256Eq (batchSize s) 0u) (flagIf (u256Eq c 10u) flagYes (u256Eq c 100u)) (u256Eq c (batchCredit s))) flagNo)
       (flagIf (u256Le (u256Add c 1u) (ry s))
-      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (swapOutX (rx s) (ry s) c) (swapOutY (rx s) (ry s) c) (hash (hash (hash (batchH s) kx) ky) c) (batchN s) (sealAt s) (accepted s) (claimed s) (u256Add (batchSize s) 1u) c (ring0 s) (ring1 s) (ring2 s) (ring3 s)) (cons (pull asset (caller env) vault (inOut (rx s) (ry s) c)) nil)))
+      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (swapOutX (rx s) (ry s) c) (swapOutY (rx s) (ry s) c) (hash (hash (hash (batchH s) kx) ky) c) (batchN s) (sealAt s) (accepted s) (claimed s) (u256Add (batchSize s) 1u) c (ring0 s) (ring1 s) (ring2 s) (ring3 s) (poll s) (charter s)) (cons (pull asset (caller env) vault (inOut (rx s) (ry s) c)) nil)))
       none)
       none
 
@@ -348,7 +355,7 @@ def deposit : (env : Env) -> (s : State) -> (kx ky c : U256) -> Option (Prod Sta
 def seal : (env : Env) -> (s : State) -> Option (Prod State (List Out)) :=
   fun (env : Env) (s : State) =>
     flagIf (flagIf (u256Eq (batchSize s) 3u) (natLe (sealAt s) (now env)) flagNo)
-      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (rx s) (ry s) (batchSeed (u256Add (batchN s) 1u)) (u256Add (batchN s) 1u) (natAdd (now env) 60) (accepted s) (claimed s) 0u 0u (ring0 s) (ring1 s) (ring2 s) (ring3 s)) (cons (Sealed (side s) (batchN s) (batchH s)) nil)))
+      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (rx s) (ry s) (batchSeed (u256Add (batchN s) 1u)) (u256Add (batchN s) 1u) (natAdd (now env) 60) (accepted s) (claimed s) 0u 0u (ring0 s) (ring1 s) (ring2 s) (ring3 s) (poll s) (charter s)) (cons (Sealed (side s) (batchN s) (batchH s)) nil)))
       none
 
 -- Entry: accept the batch hash h of batch n of the other side with the Schnorr attest (key 7).
@@ -356,7 +363,7 @@ def accept : (env : Env) -> (s : State) -> (n h sx sy ss : U256) -> Option (Prod
   fun (env : Env) (s : State) (n h sx sy ss : U256) =>
     flagIf (flagIf (mapGet (accepted s) h) flagNo flagYes)
       (flagIf (schnorrOk pk (attestMsg acceptTag (u256Sub 1u (side s)) n h) (pair (pair sx sy) ss))
-      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (rx s) (ry s) (batchH s) (batchN s) (sealAt s) (mapSet (accepted s) h flagYes) (claimed s) (batchSize s) (batchCredit s) (ring0 s) (ring1 s) (ring2 s) (ring3 s)) nil))
+      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (rx s) (ry s) (batchH s) (batchN s) (sealAt s) (mapSet (accepted s) h flagYes) (claimed s) (batchSize s) (batchCredit s) (ring0 s) (ring1 s) (ring2 s) (ring3 s) (poll s) (charter s)) nil))
       none)
       none
 
@@ -370,15 +377,17 @@ def claim : (env : Env) -> (s : State) -> (n d i0 i1 i2 c s1 s2 s3 w4 w5 : U256)
       (flagIf (mapGet (accepted s) (hash (hash (hash (hash (hash (hash (hash (hash (hash (batchSeed n) (mapGet (ring0 s) i0)) (mapGet (ring1 s) i0)) d) (mapGet (ring0 s) i1)) (mapGet (ring1 s) i1)) d) (mapGet (ring0 s) i2)) (mapGet (ring1 s) i2)) d))
       (flagIf (flagIf (mapGet (claimed s) (hash (hash w4 w5) n)) flagNo flagYes)
       (flagIf (sharedRing env s i0 i1 i2 (hash claimTag n) d c s1 s2 s3 w4 w5)
-      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (claimX (rx s) (ry s) d) (claimY (rx s) (ry s) d) (batchH s) (batchN s) (sealAt s) (accepted s) (mapSet (claimed s) (hash (hash w4 w5) n) flagYes) (batchSize s) (batchCredit s) (ring0 s) (ring1 s) (ring2 s) (ring3 s)) (cons (pay asset (caller env) (outIn (ry s) (rx s) d)) (cons (Claimed (hash w4 w5) d) nil))))
+      (some (pair (makeState (side s) (slots s) (tally s) (used s) (props s) (casts s) (opened s) (decided s) (enacted s) (claimX (rx s) (ry s) d) (claimY (rx s) (ry s) d) (batchH s) (batchN s) (sealAt s) (accepted s) (mapSet (claimed s) (hash (hash w4 w5) n) flagYes) (batchSize s) (batchCredit s) (ring0 s) (ring1 s) (ring2 s) (ring3 s) (poll s) (charter s)) (cons (pay asset (caller env) (outIn (ry s) (rx s) d)) (cons (Claimed (hash w4 w5) d) nil))))
       none)
       none)
       none)
       none
 
--- Views.
+-- Views (pollOf and charterOf: Q-S10-25 (a)).
 def sideOf : (env : Env) -> (s : State) -> U256 := fun (env : Env) (s : State) => side s
 def rxOf : (env : Env) -> (s : State) -> U256 := fun (env : Env) (s : State) => rx s
 def ryOf : (env : Env) -> (s : State) -> U256 := fun (env : Env) (s : State) => ry s
 def decidedOf : (env : Env) -> (s : State) -> (n : U256) -> U256 := fun (env : Env) (s : State) (n : U256) => mapGet (decided s) n
 def openedOf : (env : Env) -> (s : State) -> (n j : U256) -> U256 := fun (env : Env) (s : State) (n j : U256) => mapGet (opened s) (hash n j)
+def pollOf : (env : Env) -> (s : State) -> U256 := fun (env : Env) (s : State) => poll s
+def charterOf : (env : Env) -> (s : State) -> U256 := fun (env : Env) (s : State) => charter s

@@ -45,7 +45,7 @@ def ballotSlots : Map U256 U256 := mapSet (mapSet mapEmpty
   (hash (ctxOf (sigImage ballotSig) 1u) 0u) (hash (hash (hash v0s0c1x v0s0c1y) v0s0c2x) v0s0c2y))
   (hash (ctxOf (sigImage ballotSig) 1u) 1u) (hash (hash (hash v0s1c1x v0s1c1y) v0s1c2x) v0s1c2y)
 def ballotState : Map U256 U256 -> State := fun (o : Map U256 U256) =>
-  makeState 0u ballotSlots mapEmpty mapEmpty mapEmpty 0u o mapEmpty mapEmpty 1000u 1000u (batchSeed 0u) 0u 0 mapEmpty mapEmpty 0u 0u ringT0 ringT1 ringT2 ringT3
+  makeState 0u ballotSlots mapEmpty mapEmpty mapEmpty 0u o mapEmpty mapEmpty 1000u 1000u (batchSeed 0u) 0u 0 mapEmpty mapEmpty 0u 0u ringT0 ringT1 ringT2 ringT3 1u 1u
 
 def ballot : State -> Flag := fun (s : State) => acceptedResult (cast e s 1u ballotWord
   v0s0c1x v0s0c1y v0s0c2x v0s0c2y v0s1c1x v0s1c1y v0s1c2x v0s1c2y
@@ -73,7 +73,7 @@ def slotBeforeOpen : Flag := slotBallot (ballotState mapEmpty)
 def slotAfterOpen : Flag := slotBallot (ballotState (mapSet mapEmpty (hash 1u 0u) 1u))
 
 def acceptedBatch : State := makeState 1u mapEmpty mapEmpty mapEmpty mapEmpty 0u mapEmpty mapEmpty mapEmpty
-  1000u 1000u (batchSeed 0u) 0u 0 (mapSet mapEmpty (batchH threeDeposits) flagYes) mapEmpty 0u 0u ringT0 ringT1 ringT2 ringT3
+  1000u 1000u (batchSeed 0u) 0u 0 (mapSet mapEmpty (batchH threeDeposits) flagYes) mapEmpty 0u 0u ringT0 ringT1 ringT2 ringT3 1u 1u
 -- A claim of 10u from batch n with the ring signature of key 0 over poll (hash claimTag n), at
 -- eval time (Q-S10-18 (a)). claimBadSig: the words of that signature with the key image of key 1
 -- (a point on BN254, thus the ring check refuses it). fold is a right fold: claimSigWord l k is
@@ -88,3 +88,24 @@ def claimBatchZero : Flag := claimWith 0u (claimSig 0u) (claimSigWord (claimSig 
 def claimBatchOne : Flag := claimWith 1u (claimSig 1u) (claimSigWord (claimSig 1u) 1) (claimSigWord (claimSig 1u) 0)
 def claimKeyOne : List U256 := zkSign voters (zkKey 1) (hash claimTag 0u) 10u
 def claimBadSig : Flag := claimWith 0u (claimSig 0u) (claimSigWord claimKeyOne 1) (claimSigWord claimKeyOne 0)
+-- S10 s6: the amend Decision (tag 3, dx the menu index, dy 0) of the live poll (Q-S10-20 (a), Q-S10-23 (a)).
+-- homeAt p d: a home state at poll p with decided 1 = d. amendOldPoll: the poll gate of enact alone.
+def amendWord : U256 -> U256 := fun (k : U256) => hash (hash 3u k) 0u
+def homeAt : U256 -> U256 -> State := fun (p : U256) (d : U256) =>
+  makeState 0u mapEmpty mapEmpty mapEmpty mapEmpty 0u mapEmpty (mapSet mapEmpty 1u d) mapEmpty 1000u 1000u (batchSeed 0u) 0u 0 mapEmpty mapEmpty 0u 0u ringT0 ringT1 ringT2 ringT3 p 1u
+def amendOne : U256 -> U256 -> Option (Prod State (List Out)) := fun (p : U256) (k : U256) => enact e (homeAt p (amendWord k)) 1u 3u k 0u 0u 0u 0u
+def amended : State := afterEntry (homeAt 1u (amendWord 2u)) (amendOne 1u 2u)
+def amendAccepted : Flag := acceptedResult (amendOne 1u 2u)
+def amendMenuOut : Flag := acceptedResult (amendOne 1u 3u)
+def amendOldPoll : Flag := acceptedResult (amendOne 2u 2u)
+def amendTwice : Flag := acceptedResult (enact e amended 1u 3u 2u 0u 0u 0u 0u)
+def amendPoll : Flag := u256Eq (poll amended) 2u
+def amendCharter : Flag := u256Eq (charter amended) 2u
+-- close reads the charter: slot 0 is open with 2 votes (stored plus 1: 3u), 77u is the proposal word.
+-- The slot 1 words are the zero tally words of closeZero.
+def quotaAt : U256 -> State := fun (c : U256) =>
+  makeState 0u mapEmpty mapEmpty mapEmpty (mapSet mapEmpty 1u 77u) 0u (mapSet mapEmpty (hash 1u 0u) 3u) mapEmpty mapEmpty 1000u 1000u (batchSeed 0u) 0u 0 mapEmpty mapEmpty 0u 0u ringT0 ringT1 ringT2 ringT3 1u c
+def quotaOut : U256 -> Option (Prod State (List Out)) := fun (c : U256) => close e (quotaAt c) 1u 1u 0u 0u 1u 2u 0u 0u 13952815165197967125756980119533420968413717059059621486339195579699957758172u 0u 0u 1u 2u 0u 0u 14701443190095777811686243040802400733041311233058721930520713618723616718186u 0u
+def quotaWord : U256 -> U256 := fun (c : U256) => mapGet (decided (afterEntry (quotaAt c) (quotaOut c))) 1u
+def quotaTwoOfThree : Flag := flagIf (acceptedResult (quotaOut 1u)) (u256Eq (quotaWord 1u) 77u) flagNo
+def quotaThreeOfThree : Flag := flagIf (acceptedResult (quotaOut 2u)) (flagIf (u256Eq (quotaWord 2u) 77u) flagNo flagYes) flagNo

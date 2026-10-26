@@ -2,15 +2,20 @@
 -- (S10 s3): the largest gas of the entry in the first run (2026-10-25, geth
 -- evm 1.14.12, `evm run --statdump`, no intrinsic gas). A gas above its
 -- bound is a FAIL row.
+-- S10 s6 (Q-S10-26 (a)): cast, castSlot, claim, close and enact have more
+-- gas in the S10 s6 program. Their bounds and the new rows charterOf and
+-- pollOf are the largest gas of the first S10 s6 run (2026-10-26).
 accept 38054
-cast 403491
-castSlot 82143
-claim 189658
-close 145009
+cast 405645
+castSlot 84298
+charterOf 2517
+claim 189661
+close 149301
 decidedOf 2533
 deposit 120328
-enact 52506
+enact 59946
 openedOf 2636
+pollOf 2495
 rxOf 2407
 ryOf 2429
 seal 63660
